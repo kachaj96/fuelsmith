@@ -6,7 +6,7 @@ import { r1 } from './nutrition';
 export const OFF_URL = 'https://world.openfoodfacts.org/api/v2/product/';
 export const OFF_FIELDS = 'code,product_name,product_name_pl,generic_name_pl,brands,quantity,product_quantity,serving_quantity,serving_size,nutriments';
 /** Open Food Facts asks every app to name itself in the User-Agent. */
-export const USER_AGENT = 'Fuelsmith/0.5 (Android, offline food diary)';
+export const USER_AGENT = 'Fuelsmith/0.5.1 (Android, offline food diary)';
 
 export interface OffProduct { ean: string; name: string; brand?: string; per100: Per100 | null; serving?: number; pack?: number; missing: string[] }
 export type Lookup =

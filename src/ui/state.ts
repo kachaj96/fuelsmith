@@ -3,7 +3,7 @@ import { avg7, DEFAULT_MEALS, recipePer100, targets, tdee, MEALS } from '../doma
 import { paceKcal, waterTarget, type WeightGoal } from '../domain/progress';
 import type { Pending } from '../storage/backup';
 import type { OffProduct } from '../domain/off';
-import { DEFAULT_FILTERS, type Filters } from '../domain/search';
+import { DEFAULT_FILTERS, fold, type Filters } from '../domain/search';
 
 export type Tab = 'today' | 'products' | 'progress' | 'more';
 export type Page =
@@ -73,3 +73,21 @@ export const mealName = (date: string, id: string): string => dayMeals(date).fin
 /** The meal that fits the time of day, used by the scan button on Today. */
 export function mealNow(d = new Date(), date = localDate()): Meal { const ms = dayMeals(date); const h = d.getHours() + d.getMinutes() / 60; const k = Math.min(ms.length - 1, Math.max(0, Math.floor(((h - 6) / 16) * ms.length))); return ms[k]!.id; }
 export { MEALS };
+
+/* What was picked after typing a text: "skyr" -> the products chosen for it, newest first. Only on the phone (fuelsmith.picks). */
+type Picks = Record<string, string[]>;
+const readPicks = (): Picks => { try { const j = JSON.parse(localStorage.getItem('fuelsmith.picks') ?? '{}'); return j && typeof j === 'object' && !Array.isArray(j) ? j : {}; } catch { return {}; } };
+export function rememberPick(q: string, ref: string): void {
+  const k = fold(q.trim()); if (k.length < 2) return; const all = readPicks();
+  all[k] = [ref, ...(all[k] ?? []).filter(x => x !== ref)].slice(0, 5);
+  const keys = Object.keys(all); if (keys.length > 60) delete all[keys[0]!];   // oldest text first out
+  try { localStorage.setItem('fuelsmith.picks', JSON.stringify(all)); } catch { /* private mode */ }
+}
+/** Products and recipes picked for this text or a longer one that starts with it ("sky" finds what was picked for "skyr"). Deleted ones are skipped. */
+export function picksFor(q: string): { kind: 'product' | 'recipe'; id: string }[] {
+  const k = fold(q.trim()); if (k.length < 2) return []; const all = readPicks(); const out: string[] = [];
+  const exact = all[k] ?? []; const rest = Object.entries(all).filter(([t]) => t !== k && (t.startsWith(k) || k.startsWith(t))).flatMap(([, v]) => v);
+  for (const r of [...exact, ...rest]) if (!out.includes(r)) out.push(r);
+  return out.map(r => { const [kind, id] = r.split(':') as ['product' | 'recipe', string]; return { kind, id }; })
+    .filter(x => x.kind === 'product' ? !!productById(x.id) && !productById(x.id)!.deletedAt : !!recipeById(x.id) && !recipeById(x.id)!.deletedAt).slice(0, 5);
+}

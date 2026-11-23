@@ -3,8 +3,8 @@ import { addDays, avg7, dayTotals, entryMacros, forGrams, looksWrong, kcalFromMa
 import { advise, dayKcal, fiberTarget, forecast, paceKcal, PACE_PCT, planWeeks, realNeed, weekBalance, type Pace } from '../domain/progress';
 import { PART_PATHS, RADIUS, TILE } from '../brand-art';
 import { VERSION } from '../version';
-import { CATEGORIES, LABELS, SORTS, activeCount, sortHits, type Filters } from '../domain/search';
-import { currentKg, recentSearches, dayMeals, food, liveProducts, liveRecipes, localDate, mealName, mealNow, mealPlan, myTargets, page, productById, recipeById, store, waterGoal, year, type Page } from './state';
+import { CATEGORIES, LABELS, SORTS, activeCount, fold, sortHits, type Filters } from '../domain/search';
+import { currentKg, picksFor, recentSearches, dayMeals, food, liveProducts, liveRecipes, localDate, mealName, mealNow, mealPlan, myTargets, page, productById, recipeById, store, waterGoal, year, type Page } from './state';
 
 export const esc = (s: unknown): string => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
 const IC: Record<string, string> = {
@@ -67,28 +67,58 @@ const foodRow = (kind: 'product' | 'recipe', id: string, meal?: Meal): string =>
   const f = food(kind, id); if (!f) return '';
   return `<button class="li" data-a="item" data-kind="${kind}" data-id="${id}"${meal ? ` data-meal="${meal}"` : ''}><span><span class="nm">${esc(f.name)}</span><br><span class="sub">${kind === 'recipe' ? '<span class="tag">przepis</span> · ' : ''}${kc(f.per100.kcal)} kcal / 100 g${f.sub && kind === 'product' ? ' · ' + esc(f.sub) : ''}</span></span>${ico('chev')}</button>`;
 };
-/** The way into Open Food Facts from a search field: the button with the typed text, or recent searches when the field is empty. */
-function offEntry(primary: boolean, meal?: Meal): string {
-  const q = store.ui.q.trim(); const m = meal ? ` data-meal="${esc(meal)}"` : '';
-  if (q.length >= 2) return `<button class="btn ${primary ? 'pri ' : ''}block" data-a="offSearch"${m}>${ico('search')}<span class="clip">Szukaj „${esc(q)}” w Open Food Facts</span></button>`;
-  if (q) return '';
-  const rs = recentSearches(); if (!rs.length) return primary ? '<div class="meta">Wpisz nazwę, żeby szukać też w Open Food Facts.</div>' : '';
-  return `<div class="cap">Ostatnio w Open Food Facts</div><div class="chips">${rs.map(r => `<button class="chip" data-a="offSearch" data-q="${esc(r)}"${m}>${esc(r)}</button>`).join('')}</div>`;
+/** Under an empty search field: recent searches. */
+function offEntry(meal?: Meal): string {
+  if (store.ui.q.trim()) return ''; const m = meal ? ` data-meal="${esc(meal)}"` : '';
+  const rs = recentSearches(); if (!rs.length) return '<div class="meta">Wpisz nazwę: szukam w Twoich produktach, a po chwili też w Open Food Facts.</div>';
+  return `<div class="cap">Ostatnio szukane</div><div class="chips">${rs.map(r => `<button class="chip" data-a="offSearch" data-q="${esc(r)}"${m}>${esc(r)}</button>`).join('')}</div>`;
+}
+/** What was picked before for this text: first, offline, before any request. */
+function picksHtml(meal?: Meal): string {
+  const ps = picksFor(store.ui.q); if (!ps.length) return '';
+  return `<div class="cap">Ostatnio wybrane</div><div class="card list" id="picks">${ps.map(x => foodRow(x.kind, x.id, meal)).join('')}</div>`;
+}
+/** Open Food Facts results under the person's own, while typing. */
+function offInline(meal?: Meal): string {
+  const q = store.ui.q.trim(); if (fold(q).length < 3) return ''; const o = store.ui.off; const m = meal ? ` data-meal="${esc(meal)}"` : '';
+  const head = (right = '') => `<div class="row"><span class="cap grow">Open Food Facts</span>${right}</div>`;
+  if (o.q.trim() !== q) return `${head()}<div class="meta">Szukam po chwili przerwy w pisaniu…</div>`;
+  if (o.status === 'loading' || o.status === 'idle') return `${head()}<div class="meta" role="status">Szukam „${esc(q)}”…</div>`;
+  if (o.status === 'offline') return `${head()}<div class="meta">Brak internetu: szukam tylko w Twoich produktach.</div>`;
+  if (o.status === 'error') return `${head()}<div class="meta">Open Food Facts zwrócił błąd (${esc(o.detail ?? '')}).</div>`;
+  if (o.status === 'limit') return `${head()}<div class="meta">Limit 10 wyszukiwań na minutę. Spróbuj za ${o.wait} s albo naciśnij Szukaj na klawiaturze później.</div>`;
+  if (!o.hits.length) return `${head()}<div class="meta">Nic dla „${esc(q)}”${activeCount(o.f) > 1 ? ' z obecnymi filtrami' : ''}.</div><button class="btn block" data-a="offOpen"${m}>${ico('settings')}Zmień filtry</button>`;
+  const mine = new Set(liveProducts().map(p => p.ean).filter(Boolean));   // already on the phone: listed above, not twice
+  const order = sortHits(o.hits.map((h, i) => ({ ...h, __i: i })), o.q, o.f.sort).filter(h => !mine.has(h.ean)).map(h => (h as unknown as { __i: number }).__i).slice(0, 5);
+  return `${head(`<span class="cap" id="icount">${o.count} wyników</span>`)}<div class="card list" id="ilist">${order.map(offRow).join('')}</div><button class="btn block" data-a="offOpen"${m}>${ico('settings')}Wszystkie wyniki i filtry</button>`;
 }
 function filtered(q: string): { products: string[]; recipes: string[] } {
   const s = q.trim().toLowerCase(); const hit = (t: string) => !s || t.toLowerCase().includes(s);
   return { products: liveProducts().filter(p => hit(`${p.name} ${p.brand ?? ''} ${p.ean ?? ''}`)).sort((a, b) => a.name.localeCompare(b.name, 'pl')).map(p => p.id), recipes: liveRecipes().filter(r => hit(r.name)).sort((a, b) => a.name.localeCompare(b.name, 'pl')).map(r => r.id) };
 }
+/** Ids shown as "recently picked" are not repeated in the lists below. */
+const pickedIds = (): Set<string> => new Set(picksFor(store.ui.q).map(x => x.id));
 export function viewProducts(): string {
-  const { products, recipes } = filtered(store.ui.q);
+  const f0 = filtered(store.ui.q); const pk = pickedIds(); const products = f0.products.filter(id => !pk.has(id)); const recipes = f0.recipes.filter(id => !pk.has(id));
   const pend = store.pending.map(p => `<div class="li has-ib"><span><span class="nm">EAN ${esc(p.ean)}</span><br><span class="sub">zeskanowany bez internetu</span></span><button class="btn" data-a="retry" data-ean="${esc(p.ean)}">${ico('refresh')}Sprawdź</button><button class="ib" data-a="dropPending" data-ean="${esc(p.ean)}" aria-label="Usuń kod ${esc(p.ean)}">${ico('x')}</button></div>`).join('');
   return `${brandTop()}<div class="stack"><div class="pad"><h1 class="title" id="page-title">Produkty</h1>
     <div class="inp"><input id="q" data-f="q" type="search" inputmode="search" enterkeyhint="search" placeholder="Szukaj nazwy, marki albo kodu" value="${esc(store.ui.q)}" aria-label="Szukaj"></div>
-    <div data-live="offbtn">${offEntry(true)}</div>
+    <div data-live="offbtn">${offEntry()}</div>
     <div class="g2"><button class="btn" data-a="open" data-p="form">${ico('plus')}Nowy produkt</button><button class="btn" data-a="open" data-p="recipe">${ico('plus')}Nowy przepis</button></div></div>
-    ${pend ? `<div class="pad"><div class="cap">Do uzupełnienia</div><div class="card list">${pend}</div></div>` : ''}
-    <div class="pad"><div class="cap">Przepisy</div><div class="card list" data-live="rlist">${recipes.map(id => foodRow('recipe', id)).join('') || '<div class="empty">Brak przepisów. Przepis liczy makro na 100 g gotowego dania.</div>'}</div></div>
-    <div class="pad"><div class="cap" data-live="pcount">Produkty · ${products.length}</div><div class="card list" id="plist" data-live="plist">${products.map(id => foodRow('product', id)).join('') || '<div class="empty">Brak produktów. Zeskanuj kod albo dodaj produkt z etykiety.</div>'}</div></div></div>`;
+    <div class="stack" data-live="plower">${productsLower(products, recipes, pend)}</div></div>`;
+}
+/** Below the field. Empty field: everything. While searching: what was picked before, your matches, then Open Food Facts; empty sections are left out. */
+function productsLower(products: string[], recipes: string[], pend: string): string {
+  const sec = (cap: string, body: string, id = ''): string => `<div class="pad"><div class="cap">${cap}</div><div class="card list"${id ? ` id="${id}"` : ''}>${body}</div></div>`;
+  if (!store.ui.q.trim()) return `${pend ? sec('Do uzupełnienia', pend) : ''}
+    ${sec('Przepisy', recipes.map(id => foodRow('recipe', id)).join('') || '<div class="empty">Brak przepisów. Przepis liczy makro na 100 g gotowego dania.</div>')}
+    ${sec(`Produkty · ${products.length}`, products.map(id => foodRow('product', id)).join('') || '<div class="empty">Brak produktów. Zeskanuj kod albo dodaj produkt z etykiety.</div>', 'plist')}`;
+  const picks = picksHtml(); const none = !picks && !products.length && !recipes.length;
+  return `${picks ? `<div class="pad">${picks}</div>` : ''}
+    ${recipes.length ? sec(`Twoje przepisy · ${recipes.length}`, recipes.map(id => foodRow('recipe', id)).join('')) : ''}
+    ${products.length ? sec(`Twoje produkty · ${products.length}`, products.map(id => foodRow('product', id)).join(''), 'plist') : ''}
+    ${none ? '<div class="pad"><div class="meta">Nic w Twoich produktach.</div></div>' : ''}
+    ${offInline() ? `<div class="pad">${offInline()}</div>` : ''}`;
 }
 
 function progCal(): string {
@@ -179,7 +209,7 @@ export const TAB_VIEWS: Record<string, () => string> = { today: viewToday, produ
 
 /* ---------------- pages ---------------- */
 function pageAdd(meal: Meal): string {
-  const L = store.ui.list; const { products, recipes } = filtered(store.ui.q);
+  const L = store.ui.list; const f0 = filtered(store.ui.q); const pk = pickedIds(); const products = f0.products.filter(id => !pk.has(id)); const recipes = f0.recipes.filter(id => !pk.has(id));
   const recent = [...new Map([...store.entries].sort((a, b) => b.at - a.at).map(e => [e.productId, e])).values()].slice(0, 12);
   let list = '';
   if (store.ui.q.trim()) list = [...recipes.map(id => foodRow('recipe', id, meal)), ...products.map(id => foodRow('product', id, meal))].join('');
@@ -192,9 +222,11 @@ function pageAdd(meal: Meal): string {
     <button class="btn pri block" data-a="scan" data-meal="${esc(meal)}">${ico('scan')}Skanuj kod</button>
     <div class="g3"><button class="btn" data-a="open" data-p="code" data-meal="${esc(meal)}">Wpisz kod</button><button class="btn" data-a="open" data-p="form" data-meal="${esc(meal)}">Z etykiety</button><button class="btn" data-a="open" data-p="quick" data-meal="${esc(meal)}">Szybkie kcal</button></div>
     <div class="inp"><input id="q" data-f="q" type="search" inputmode="search" enterkeyhint="search" placeholder="Szukaj w moich produktach" value="${esc(store.ui.q)}" aria-label="Szukaj"></div>
-    <div data-live="offbtn">${offEntry(false, meal)}</div>
+    <div data-live="offbtn">${offEntry(meal)}</div>
     <div data-live="atabs">${store.ui.q.trim() ? '' : `<div class="tabs" role="tablist">${[['recent', 'Ostatnie'], ['fav', 'Ulubione'], ['recipes', 'Przepisy'], ['all', 'Wszystkie']].map(([k, l]) => `<button role="tab" data-a="list" data-id="${k}" aria-selected="${L === k}">${l}</button>`).join('')}</div>`}</div>
-    <div class="card list" id="alist" data-live="alist">${list || `<div class="empty">${store.ui.q.trim() ? 'Nic nie pasuje.' : empty}</div>`}</div></div></div></div>`;
+    <div data-live="picks">${picksHtml(meal)}</div>
+    <div class="card list" id="alist" data-live="alist">${list || `<div class="empty">${store.ui.q.trim() ? 'Nic nie pasuje w Twoich produktach.' : empty}</div>`}</div>
+    <div data-live="offres">${offInline(meal)}</div></div></div></div>`;
 }
 
 function pageItem(p: Extract<Page, { t: 'item' }>): string {

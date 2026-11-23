@@ -1,14 +1,14 @@
 /* Every data-a handler. The DOM gives the arguments (data-id, data-meal...), the store is the only state, storage is written right away. */
 import { cleanEan, MEALS, validEan, recipePer100, type Entry, type Meal, type Product, type Recipe } from '../domain/nutrition';
 import { lookupEan, type Fetcher, type OffProduct } from '../domain/off';
-import { DEFAULT_FILTERS, RateLimit, sameQuery, searchOff, type Filters, type Sort } from '../domain/search';
+import { DEFAULT_FILTERS, fold, RateLimit, sameQuery, searchOff, type Filters, type Sort } from '../domain/search';
 import { saveTextFile } from '../platform/files';
 import { scanBarcode } from '../platform/scan';
 import { exportBackup, restoreBackup, validateBackup } from '../storage/backup';
 import { del, getAll, put, putMeta, mirrorTheme } from '../storage/db';
 import { draftProfile, formDraft, numOf, profileDraft } from './views';
 import { render, renderPage, toast, applyTheme } from './render';
-import { rememberSearch, saveFilters } from './state';
+import { rememberPick, rememberSearch, saveFilters } from './state';
 import { dayMeals, food, localDate, mealName, mealNow, mealPlan, myTargets, page, productById, recipeById, store, uid, type Page } from './state';
 import type { DayMeals, MealDef, Water } from '../domain/nutrition';
 import { DEFAULT_MEALS, MAX_MEALS, MEAL_PRESETS } from '../domain/nutrition';
@@ -25,7 +25,7 @@ async function ensureDay(date: string): Promise<DayMeals> {
 }
 async function saveDay(d: DayMeals): Promise<void> { if (await safe(put(store.db, 'days', d))) store.days = [...store.days.filter(x => x.date !== d.date), d]; }
 const safe = async (p: Promise<unknown>): Promise<boolean> => { try { await p; return true; } catch { toast('Nie udało się zapisać. Zrób kopię zapasową w Więcej i uruchom aplikację ponownie.'); return false; } };
-export function push(p: Page): void { ui().stack.push(p); ui().draft = {}; ui().err = ''; if (p.t !== 'pickIng') ui().q = ''; render(); }
+export function push(p: Page): void { clearTimeout(pause); ui().stack.push(p); ui().draft = {}; ui().err = ''; if (p.t !== 'pickIng') ui().q = ''; render(); }
 export function goBack(): boolean {
   if (!ui().stack.length) return false;
   if (page()?.t === 'offs' && ui().off.sheet) { ui().off.sheet = false; renderPage(); return true; }
@@ -61,40 +61,57 @@ export async function handleCode(raw: string, meal: Meal, replace = false): Prom
 
 /** A product from Open Food Facts (scan or search): complete ones are saved and opened to weigh, ones with gaps open the form filled with what there is.
     A product already on the phone (same barcode) is opened instead of a copy, so your corrections win. */
-async function openOff(x: OffProduct, meal: Meal, go: (p: Page) => void = push): Promise<void> {
+async function openOff(x: OffProduct, meal: Meal, go: (p: Page) => void = push): Promise<string | undefined> {
   const ean = validEan(x.ean) ? x.ean : '';
   const local = ean ? store.products.find(p => p.ean === ean && !p.deletedAt) : undefined;
-  if (local) { go({ t: 'item', kind: 'product', id: local.id, meal }); return; }
+  if (local) { go({ t: 'item', kind: 'product', id: local.id, meal }); return local.id; }
   if (x.per100 && x.name && !x.missing.length) {
     const p: Product = { id: uid(), name: x.name, ...(x.brand ? { brand: x.brand } : {}), ...(ean ? { ean } : {}), per100: x.per100, ...(x.serving ? { serving: x.serving } : {}), ...(x.pack ? { pack: x.pack } : {}), source: 'off', createdAt: Date.now(), updatedAt: Date.now() };
-    await saveProduct(p); go({ t: 'item', kind: 'product', id: p.id, meal }); return;
+    await saveProduct(p); go({ t: 'item', kind: 'product', id: p.id, meal }); return p.id;
   }
   const s = (v?: number) => (v == null ? '' : String(v).replace('.', ',')); const miss = new Set(x.missing);
   go({ t: 'form', ...(ean ? { ean } : {}), meal, reason: 'incomplete' });
   ui().draft = { name: x.name, brand: x.brand ?? '', ean, kcal: miss.has('kcal') ? '' : s(x.per100?.kcal), p: miss.has('p') ? '' : s(x.per100?.p), f: miss.has('f') ? '' : s(x.per100?.f), c: miss.has('c') ? '' : s(x.per100?.c), fiber: s(x.per100?.fiber), serving: s(x.serving), pack: s(x.pack), __init: '1', __src: 'off' };
-  renderPage();
+  renderPage(); return undefined;
 }
 
 /* ---- 0.5: search in Open Food Facts by name ---- */
 const limiter = new RateLimit();
 const off = () => ui().off;
+/** Results of this session by text and filters (not sorting), so the same question is never asked twice. */
+const cache = new Map<string, { hits: OffProduct[]; count: number; pages: number; page: number }>();
+const ckey = (q: string, f: Filters): string => JSON.stringify([fold(q.trim()), f.cats, f.labels, f.poland, f.full]);
+/** Draws what shows the search: the results page, or the live part of Products / Add while typing. */
+const redraw = (): void => { if (page()?.t === 'offs') renderPage(); else renderPage(true); };
 /** Runs one search. page 1 replaces the results, later pages are added. Nothing is sent when the minute's limit is used up. */
 async function runSearch(pg: number): Promise<void> {
   const o = off(); const q = o.q.trim(); if (q.length < 2) return;
-  const w = limiter.wait(Date.now()); if (w) { o.status = 'limit'; o.wait = w; renderPage(); return; }
-  limiter.take(Date.now()); o.status = 'loading'; if (pg === 1) { o.hits = []; o.count = 0; o.pages = 0; } renderPage();
+  const k = ckey(q, o.f); const c = cache.get(k);
+  if (c && pg <= c.page) { Object.assign(o, { hits: c.hits, count: c.count, pages: c.pages, page: c.page, status: 'ok' }); redraw(); return; }
+  const w = limiter.wait(Date.now()); if (w) { o.status = 'limit'; o.wait = w; redraw(); return; }
+  limiter.take(Date.now()); o.status = 'loading'; if (pg === 1) { o.hits = []; o.count = 0; o.pages = 0; } redraw();
   const asked = JSON.stringify([q, o.f]);
   const r = await searchOff(q, o.f, pg, fetcher);
   if (JSON.stringify([off().q.trim(), off().f]) !== asked) return;   // a newer search took over
-  if (r.kind === 'ok') { o.hits = pg === 1 ? r.hits : [...o.hits, ...r.hits]; o.count = r.count; o.pages = r.pages; o.page = pg; o.status = 'ok'; rememberSearch(q); }
+  if (r.kind === 'ok') { o.hits = pg === 1 ? r.hits : [...o.hits, ...r.hits]; o.count = r.count; o.pages = r.pages; o.page = pg; o.status = 'ok'; rememberSearch(q);
+    cache.set(k, { hits: o.hits, count: o.count, pages: o.pages, page: pg }); if (cache.size > 40) cache.delete(cache.keys().next().value!); }
   else { o.status = r.kind; o.detail = r.kind === 'error' ? r.detail : undefined; }
-  if (page()?.t === 'offs') renderPage();
+  redraw();
 }
 export function startSearch(q: string, meal?: Meal): void {
   const o = off(); o.q = q.trim(); o.sheet = false; o.status = 'idle';
   if (page()?.t === 'offs') renderPage(); else push({ t: 'offs', ...(meal ? { meal } : {}) });
   void runSearch(1);
 }
+/* Typing in Products or Add asks Open Food Facts after a 1 s pause and at least 3 letters, never on every key (10 searches a minute). */
+export const PAUSE_MS = 1000;
+let pause = 0;
+function searchAfterPause(): void {
+  clearTimeout(pause); const q = ui().q.trim();
+  if (fold(q).length < 3) return;
+  pause = window.setTimeout(() => { if (ui().q.trim() !== q) return; const t = page()?.t; if (t && t !== 'add') return; off().q = q; void runSearch(1); }, PAUSE_MS);
+}
+const mealHere = (): Meal => { const p = page(); return p && (p.t === 'offs' || p.t === 'add') && p.meal ? p.meal : defMeal(); };
 const setF = (f: Filters): void => { off().f = f; saveFilters(f); };
 
 const A: Record<string, (el: HTMLElement) => void | Promise<void>> = {
@@ -125,7 +142,7 @@ const A: Record<string, (el: HTMLElement) => void | Promise<void>> = {
   lookup: async el => { await handleCode(ui().draft.code ?? '', (el.dataset.meal as Meal) || defMeal(), true); },
   retry: async el => { await handleCode(el.dataset.ean!, defMeal()); },
   dropPending: async el => { const ean = el.dataset.ean!; const row = store.pending.find(x => x.ean === ean); await dropPending(ean); render(); if (row) toast(`Usunięto kod ${ean}`, async () => { await safe(put(store.db, 'pending', row)); store.pending = [...store.pending, row]; render(); }); },
-  item: el => push({ t: 'item', kind: el.dataset.kind as 'product' | 'recipe', id: el.dataset.id!, meal: (el.dataset.meal as Meal) || (page()?.t === 'add' ? (page() as { meal: Meal }).meal : defMeal()) }),
+  item: el => { const q = ui().q.trim(); const t = page()?.t; if (q && (!t || t === 'add')) rememberPick(q, `${el.dataset.kind}:${el.dataset.id}`); push({ t: 'item', kind: el.dataset.kind as 'product' | 'recipe', id: el.dataset.id!, meal: (el.dataset.meal as Meal) || (page()?.t === 'add' ? (page() as { meal: Meal }).meal : defMeal()) }); },
   entry: el => { const e = store.entries.find(x => x.id === el.dataset.id); if (!e) return; if (e.quick) { push({ t: 'quick', meal: e.meal, entryId: e.id }); return; } const kind = recipeById(e.productId) ? 'recipe' : 'product'; push({ t: 'item', kind, id: e.productId, meal: e.meal, grams: e.grams, entryId: e.id }); },
   grams: el => { ui().draft.grams = String(el.dataset.v).replace('.', ','); renderPage(); },
   fav: async el => { const p = productById(el.dataset.id!); if (!p) return; p.fav = !p.fav; await saveProduct(p); renderPage(); },
@@ -251,7 +268,9 @@ const A: Record<string, (el: HTMLElement) => void | Promise<void>> = {
   offSearch: el => { const q = el.dataset.q ?? ui().q; const meal = (el.dataset.meal as Meal) || (page()?.t === 'add' ? (page() as { meal: Meal }).meal : undefined); if (q.trim().length >= 2) startSearch(q, meal); },
   offGo: () => { void runSearch(1); },
   offMore: () => { void runSearch(off().page + 1); },
-  offPick: async el => { const x = off().hits[+el.dataset.i!]; const p = page(); if (!x || p?.t !== 'offs') return; await openOff(x, p.meal ?? defMeal()); },
+  offPick: async el => { const x = off().hits[+el.dataset.i!]; if (!x) return; const q = off().q; const id = await openOff(x, mealHere()); if (id) rememberPick(q, `product:${id}`); },
+  /** From the results under the field to the full list with filters: no new request, the results are already there. */
+  offOpen: el => { const meal = (el.dataset.meal as Meal) || undefined; clearTimeout(pause); const o = off(); if (o.q.trim() === ui().q.trim() && o.status === 'ok') push({ t: 'offs', ...(meal ? { meal } : {}) }); else startSearch(ui().q, meal); },
   offSheet: () => { const o = off(); o.draftF = JSON.parse(JSON.stringify(o.f)); o.sheet = true; renderPage(); },
   offClose: () => { off().sheet = false; renderPage(); },
   offCat: el => { const d = off().draftF; const id = el.dataset.id!; d.cats = d.cats.includes(id) ? d.cats.filter(x => x !== id) : [...d.cats, id]; renderPage(true); },
@@ -284,7 +303,7 @@ export function onClick(ev: Event): void {
 export function onInput(ev: Event): void {
   const el = ev.target as HTMLInputElement; const k = el.dataset.f; if (!k) return;
   const p = page();
-  if (k === 'q') { ui().q = el.value; renderPage(true); return; }
+  if (k === 'q') { ui().q = el.value; renderPage(true); if (page()?.t !== 'pickIng') searchAfterPause(); return; }
   if (k === 'oq') { ui().off.q = el.value; renderPage(true); return; }
   if (k === 'ing') { const r = ui().recipeDraft; if (r) { const v = numOf(el.value); r.items[+el.dataset.k!]!.grams = v && v > 0 ? v : 0; renderPage(true); } return; }
   if (k === 'rname') { if (ui().recipeDraft) ui().recipeDraft!.name = el.value; return; }
@@ -297,7 +316,7 @@ export function onInput(ev: Event): void {
 /** Enter in a search field: on Products and Add it asks Open Food Facts, on the results page it searches again. */
 export function onKey(ev: KeyboardEvent): void {
   if (ev.key !== 'Enter') return; const el = ev.target as HTMLInputElement; const k = el.dataset?.f;
-  if (k === 'q' && page()?.t !== 'pickIng' && el.value.trim().length >= 2) { ev.preventDefault(); el.blur(); const p = page(); startSearch(el.value, p?.t === 'add' ? p.meal : undefined); }
+  if (k === 'q' && page()?.t !== 'pickIng' && el.value.trim().length >= 2) { ev.preventDefault(); el.blur(); clearTimeout(pause); const p = page(); startSearch(el.value, p?.t === 'add' ? p.meal : undefined); }
   else if (k === 'oq' && el.value.trim().length >= 2) { ev.preventDefault(); el.blur(); ui().off.q = el.value; void runSearch(1); }
 }
 export function onChange(ev: Event): void {

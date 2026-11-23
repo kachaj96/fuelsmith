@@ -1,6 +1,13 @@
-# Fuelsmith v0.5.0
+# Fuelsmith v0.5.1
 
 Dziennik jedzenia na Androida: skanujesz kod EAN, aplikacja pobiera skład z Open Food Facts i liczy kalorie i makro dla zjedzonej ilości. Offline po pierwszym skanie produktu, dane w telefonie, bez konta.
+
+## Co nowego w 0.5.1
+- **Szukanie bez przycisku:** po 1 s przerwy w pisaniu i co najmniej 3 literach aplikacja sama pyta Open Food Facts. Wyniki (5 najlepszych) są pod Twoimi produktami, „Wszystkie wyniki i filtry” otwiera pełną listę bez nowego zapytania. Enter dalej szuka od razu.
+- **Ostatnio wybrane:** produkt wybrany po wpisaniu tekstu jest na górze przy następnym wpisaniu tego tekstu albo jego początku („sk” → to, co wybrałeś dla „skyr”). Działa bez sieci, zapis tylko w telefonie (`fuelsmith.picks`).
+- To samo pytanie z tymi samymi filtrami nie idzie drugi raz w tej sesji (pamięć wyników).
+- Podczas szukania puste sekcje znikają, produkty z telefonu nie powtarzają się w wynikach z Open Food Facts.
+- Poprawka: dotknięcie filtra zmienia tylko chip, arkusz nie zamyka się i nie otwiera.
 
 ## Co nowego w 0.5.0
 - **Wyszukiwarka Open Food Facts** (przy włączonym internecie): w Produktach i przy dodawaniu do posiłku wpisz nazwę i naciśnij Szukaj (albo Enter). Twoje produkty pokazują się od razu, Open Food Facts dopiero po zatwierdzeniu.

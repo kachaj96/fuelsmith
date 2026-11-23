@@ -208,10 +208,14 @@ for (const scheme of ['light', 'dark']) for (const [w, h] of [[360, 760], [412, 
   check(`${T} water history shows "brak" for empty days`, (await page.locator('.mac', { hasText: 'brak' }).count()) >= 1);
   // ---- 0.5: search in Open Food Facts by name ----
   await page.click('[data-a=tab][data-id=products]');
-  check(`${T} search: nothing is sent while typing`, await (async () => { await page.fill('#q', 'skyr'); return searches.length === 0; })());
-  check(`${T} search: the Open Food Facts button names the text`, /Szukaj „skyr” w Open Food Facts/.test((await page.textContent('[data-a=offSearch]')) ?? ''));
-  await page.press('#q', 'Enter'); await page.waitForSelector('#olist');
-  { const q = searches[0]?.searchParams.get('q'); check(`${T} search: Enter sends the text with Poland and full macros`, searches.length === 1 && q === 'skyr countries_tags:"en:poland" nutriments.proteins_100g:* nutriments.fat_100g:* nutriments.carbohydrates_100g:*', q); }
+  await page.fill('#q', 'skyr');
+  check(`${T} search: nothing is sent while typing`, searches.length === 0 && (await page.locator('#main', { hasText: 'Szukam po chwili przerwy' }).count()) === 1);
+  await page.waitForSelector('#ilist', { timeout: 4000 });
+  { const q = searches[0]?.searchParams.get('q'); check(`${T} search: after a pause one request with Poland and full macros`, searches.length === 1 && q === 'skyr countries_tags:"en:poland" nutriments.proteins_100g:* nutriments.fat_100g:* nutriments.carbohydrates_100g:*', q); }
+  check(`${T} search: results under your own products, field keeps focus`, (await page.locator('#ilist [data-a=offPick]').count()) === 3 && (await txt(page, '#icount')) === '25wyników' && await page.evaluate(() => document.activeElement?.id) === 'q');
+  await audit(page, `${T} search inline`);
+  await page.click('[data-a=offOpen]'); await page.waitForSelector('#olist');
+  check(`${T} search: "all results" opens the list without a new request`, searches.length === 1);
   check(`${T} search: 3 of 25 results shown`, (await txt(page, '#ocount')) === 'Wyniki·3z25' && (await page.locator('#olist [data-a=offPick]').count()) === 3, await txt(page, '#ocount'));
   check(`${T} search: values that do not add up are marked`, (await page.locator('#olist .warn-t').count()) === 1);
   await audit(page, `${T} search`);
@@ -247,6 +251,13 @@ for (const scheme of ['light', 'dark']) for (const [w, h] of [[360, 760], [412, 
   await page.click('[data-a=back]'); await page.fill('#q', ''); await page.waitForTimeout(100);
   check(`${T} search: recent searches on Products`, (await page.locator('[data-a=offSearch][data-q=skyr]').count()) === 1);
   check(`${T} search: filters remembered`, await page.evaluate(() => JSON.parse(localStorage.getItem('fuelsmith.searchFilters')).cats.join() === 'dairy'));
+  await page.fill('#q', 'sk');
+  check(`${T} search: what was picked for "skyr" comes first for "sk", offline`, (await page.locator('#picks [data-a=item]').count()) === 1 && /Skyr naturalny/.test((await page.textContent('#picks')) ?? '') && searches.length === 10);
+  check(`${T} search: a picked product is not listed twice`, (await page.locator('#plist .nm', { hasText: 'Skyr naturalny' }).count()) === 0);
+  await page.fill('#q', 'skyr'); await page.waitForSelector('#ilist', { timeout: 4000 });
+  check(`${T} search: the same question again comes from memory, even at the limit`, searches.length === 10 && (await page.locator('#ilist [data-a=offPick]').count()) >= 3);
+  await audit(page, `${T} search picks`);
+  await page.fill('#q', '');
   check(`${T} no page errors`, errors.length === 0, errors.join(' | '));
   await ctx.close();
 }
