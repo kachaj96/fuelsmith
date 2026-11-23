@@ -401,11 +401,11 @@ function offSheet(): string {
   return `<div class="scrim" data-a="offClose"></div><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-t">
     <div class="row"><h2 class="b grow" id="sheet-t">Filtry</h2><button class="ib" data-a="offClose" aria-label="Zamknij filtry">${ico('x')}</button></div>
     <div class="sheet-b">
-    <div class="cap">Kategoria</div><div class="chips">${CATEGORIES.map(c => chip('offCat', c.id, c.name, d.cats.includes(c.id))).join('')}</div>
-    <div class="cap">Z etykiety producenta</div><div class="chips">${LABELS.map(l => chip('offLabel', l.id, l.name, d.labels.includes(l.id))).join('')}</div>
+    <div class="cap">Kategoria</div><div class="chips" data-live="scats">${CATEGORIES.map(c => chip('offCat', c.id, c.name, d.cats.includes(c.id))).join('')}</div>
+    <div class="cap">Z etykiety producenta</div><div class="chips" data-live="slabels">${LABELS.map(l => chip('offLabel', l.id, l.name, d.labels.includes(l.id))).join('')}</div>
     <div class="meta">Tylko produkty z takim oznaczeniem. Brak oznaczenia nie znaczy, że produkt go nie spełnia. Przy alergii sprawdź opakowanie.</div>
-    <div class="card list">${sw('poland', 'Sprzedawane w Polsce', 'Bez tego większość wyników jest z innych krajów')}${sw('full', 'Tylko z pełnym makro', 'Białko, tłuszcze i węglowodany na 100 g')}</div>
-    <div class="cap">Sortowanie</div><div class="chips">${SORTS.map(o => chip('offSort', o.id, o.name, d.sort === o.id)).join('')}</div></div>
+    <div class="card list" data-live="ssw">${sw('poland', 'Sprzedawane w Polsce', 'Bez tego większość wyników jest z innych krajów')}${sw('full', 'Tylko z pełnym makro', 'Białko, tłuszcze i węglowodany na 100 g')}</div>
+    <div class="cap">Sortowanie</div><div class="chips" data-live="ssort">${SORTS.map(o => chip('offSort', o.id, o.name, d.sort === o.id)).join('')}</div></div>
     <div class="g2"><button class="btn" data-a="offClear">Wyczyść</button><button class="btn pri" data-a="offApply">Pokaż wyniki</button></div></div>`;
 }
 function pageOffs(): string {

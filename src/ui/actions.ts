@@ -254,11 +254,11 @@ const A: Record<string, (el: HTMLElement) => void | Promise<void>> = {
   offPick: async el => { const x = off().hits[+el.dataset.i!]; const p = page(); if (!x || p?.t !== 'offs') return; await openOff(x, p.meal ?? defMeal()); },
   offSheet: () => { const o = off(); o.draftF = JSON.parse(JSON.stringify(o.f)); o.sheet = true; renderPage(); },
   offClose: () => { off().sheet = false; renderPage(); },
-  offCat: el => { const d = off().draftF; const id = el.dataset.id!; d.cats = d.cats.includes(id) ? d.cats.filter(x => x !== id) : [...d.cats, id]; renderPage(); },
-  offLabel: el => { const d = off().draftF; const id = el.dataset.id!; d.labels = d.labels.includes(id) ? d.labels.filter(x => x !== id) : [...d.labels, id]; renderPage(); },
-  offToggle: el => { const d = off().draftF; const k = el.dataset.id as 'poland' | 'full'; d[k] = !d[k]; renderPage(); },
-  offSort: el => { off().draftF.sort = el.dataset.id as Sort; renderPage(); },
-  offClear: () => { off().draftF = { ...DEFAULT_FILTERS, cats: [], labels: [] }; renderPage(); },
+  offCat: el => { const d = off().draftF; const id = el.dataset.id!; d.cats = d.cats.includes(id) ? d.cats.filter(x => x !== id) : [...d.cats, id]; renderPage(true); },
+  offLabel: el => { const d = off().draftF; const id = el.dataset.id!; d.labels = d.labels.includes(id) ? d.labels.filter(x => x !== id) : [...d.labels, id]; renderPage(true); },
+  offToggle: el => { const d = off().draftF; const k = el.dataset.id as 'poland' | 'full'; d[k] = !d[k]; renderPage(true); },
+  offSort: el => { off().draftF.sort = el.dataset.id as Sort; renderPage(true); },
+  offClear: () => { off().draftF = { ...DEFAULT_FILTERS, cats: [], labels: [] }; renderPage(true); },
   offApply: () => { const o = off(); const same = sameQuery(o.draftF, o.f); setF(JSON.parse(JSON.stringify(o.draftF))); o.sheet = false; if (same) renderPage(); else void runSearch(1); },
   /** A chip under the field removes one filter at once (a new search). */
   offDrop: el => { const o = off(); const [k, id] = el.dataset.id!.split(':') as [string, string]; const f: Filters = JSON.parse(JSON.stringify(o.f));

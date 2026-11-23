@@ -216,6 +216,9 @@ for (const scheme of ['light', 'dark']) for (const [w, h] of [[360, 760], [412, 
   check(`${T} search: values that do not add up are marked`, (await page.locator('#olist .warn-t').count()) === 1);
   await audit(page, `${T} search`);
   await page.click('[data-a=offSheet]'); await audit(page, `${T} search filters`);
+  await page.evaluate(() => { document.querySelector('.sheet').__same = 1; const b = document.querySelector('.sheet-b'); b.scrollTop = 40; window.__st = b.scrollTop; });
+  await page.click('[data-a=offToggle][data-id=full]'); await page.click('[data-a=offToggle][data-id=full]');
+  check(`${T} filters: a tap marks the chip without redrawing the sheet (no close and open, scroll kept)`, await page.evaluate(() => document.querySelector('.sheet').__same === 1 && document.querySelector('.sheet-b').scrollTop === window.__st));
   await page.click('[data-a=offSort][data-id=protein]'); await page.click('[data-a=offCat][data-id=dairy]'); await page.click('[data-a=offApply]'); await page.waitForTimeout(250);
   check(`${T} search: a category is a new request`, searches.length === 2 && /categories_tags:"en:dairies"/.test(searches[1].searchParams.get('q')));
   { const names = await page.locator('#olist .nm').allTextContents(); check(`${T} search: protein per 100 kcal, the bad label last`, names.join('|') === 'Skyr naturalny|Skyr pitny wanilia|Serek typu skyr', names.join('|')); }
