@@ -13,7 +13,7 @@ describe('portion maths', () => {
   });
   it('a day adds its entries', () => {
     const e = (g: number): Entry => ({ id: String(g), date: '2026-11-23', meal: 'lunch', productId: 'x', name: 'x', grams: g, per100: { kcal: 100, p: 10, f: 5, c: 1 }, at: 0 });
-    expect(dayTotals([e(150), e(50)])).toEqual({ kcal: 200, p: 20, f: 10, c: 2 });
+    expect(dayTotals([e(150), e(50)])).toEqual({ kcal: 200, p: 20, f: 10, c: 2, fiber: 0 });
   });
 });
 

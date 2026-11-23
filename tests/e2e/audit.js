@@ -73,6 +73,9 @@
     const ov = [], close = [];
     for (let i = 0; i < rects.length; i++) for (let j = i + 1; j < rects.length; j++) {
       const A = rects[i], B = rects[j]; if (A.e.contains(B.e) || B.e.contains(A.e)) continue;
+      // a control under a fixed or sticky bar is a layer (it scrolls out from under it), not an overlap of hit areas
+      const layer = e => { for (let x = e; x && x !== document.body; x = x.parentElement) { const cs = getComputedStyle(x), pos = cs.position; if (pos === 'fixed' || pos === 'sticky' || (pos === 'absolute' && cs.zIndex !== 'auto')) return x; } return null; };
+      if (layer(A.e) !== layer(B.e)) continue;
       const dx = Math.max(0, Math.max(A.r.left, B.r.left) - Math.min(A.r.right, B.r.right)), dy = Math.max(0, Math.max(A.r.top, B.r.top) - Math.min(A.r.bottom, B.r.bottom));
       const overlap = A.r.left < B.r.right - 0.5 && B.r.left < A.r.right - 0.5 && A.r.top < B.r.bottom - 0.5 && B.r.top < A.r.bottom - 0.5;
       if (overlap) { const pa = document.elementFromPoint((A.r.left + A.r.right) / 2, (A.r.top + A.r.bottom) / 2); if (pa && (A.e.contains(pa) || B.e.contains(pa))) ov.push(`${desc(A.e)} / ${desc(B.e)}`); continue; }

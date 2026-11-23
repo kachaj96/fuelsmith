@@ -1,8 +1,8 @@
 
 /* Local-first persistence. IndexedDB database "fuelsmith" (never a sibling's), localStorage keys only with the prefix "fuelsmith.". */
 export const DB_NAME = 'fuelsmith';
-export const DB_VERSION = 1;
-export const STORES = ['meta', 'products', 'entries', 'recipes', 'weights', 'pending'] as const;
+export const DB_VERSION = 2;   // 2: days (meals of a day), water
+export const STORES = ['meta', 'products', 'entries', 'recipes', 'weights', 'pending', 'days', 'water'] as const;
 export type StoreName = (typeof STORES)[number];
 export class StorageError extends Error { constructor(public code: 'open' | 'write' | 'read', msg: string) { super(msg); } }
 
@@ -12,7 +12,7 @@ export function openDb(factory: IDBFactory = indexedDB): Promise<IDBDatabase> {
     try { req = factory.open(DB_NAME, DB_VERSION); } catch (e) { reject(new StorageError('open', e instanceof Error ? e.message : String(e))); return; }
     req.onupgradeneeded = () => {
       const db = req.result;
-      for (const [n, key] of [['meta', 'key'], ['products', 'id'], ['entries', 'id'], ['recipes', 'id'], ['weights', 'date'], ['pending', 'ean']] as const)
+      for (const [n, key] of [['meta', 'key'], ['products', 'id'], ['entries', 'id'], ['recipes', 'id'], ['weights', 'date'], ['pending', 'ean'], ['days', 'date'], ['water', 'id']] as const)
         if (!db.objectStoreNames.contains(n)) db.createObjectStore(n, { keyPath: key });
     };
     req.onsuccess = () => resolve(req.result);

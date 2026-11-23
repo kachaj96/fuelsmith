@@ -10,4 +10,6 @@ Testy (vitest, Playwright Chromium 360 i 412 px, jasny i ciemny motyw) przeszły
 | Dane | Że IndexedDB przetrwa zamknięcie aplikacji, restart telefonu i aktualizację APK. | 0.3 |
 | Kopia | Okno „Udostępnij” przy zapisie i wybór pliku przy wczytywaniu w WebView Androida. | 0.3 |
 | Ekran | Krawędzie ekranu (wycięcie, pasek gestów), klawiatura numeryczna przy polach gramów, przycisk wstecz Androida. | 0.3 |
+| Prognoza i podpowiedzi | Zachowanie na prawdziwych, nieregularnych pomiarach przez kilka tygodni. W testach tylko dane modelowe (stałe tempo, codzienne wpisy). | 0.4 |
+| Kalendarz i posiłki | Przewijanie miesięcy i edycja nazw posiłków na telefonie z klawiaturą Androida. | 0.4 |
 | Ikona | Maski launcherów i ikona monochromatyczna Androida 13+. | 0.3 |

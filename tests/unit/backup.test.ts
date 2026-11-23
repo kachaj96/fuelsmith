@@ -19,6 +19,10 @@ describe('backup', () => {
     const again = await exportBackup(b);
     expect({ ...again, exportedAt: 0 }).toEqual({ ...data, exportedAt: 0 });
   });
+  it('a 0.3 file (schema 1, no days, water or goal) still loads', () => {
+    const c = validateBackup('{"app":"fuelsmith","schema":1,"products":[],"entries":[{"id":"e","date":"2026-11-20","meal":"breakfast","productId":"p","name":"x","grams":100,"per100":{"kcal":100,"p":1,"f":1,"c":1},"at":1}],"recipes":[],"weights":[]}');
+    expect(c.ok).toBe(true); if (c.ok) expect([c.data.days, c.data.water, c.data.goal, c.data.entries[0]!.meal]).toEqual([[], [], null, 'breakfast']);
+  });
   it('refuses a sibling app, a broken file and a newer schema', () => {
     expect(validateBackup('{"app":"flexsmith","schema":1}')).toEqual({ ok: false, reason: 'app' });
     expect(validateBackup('not json')).toEqual({ ok: false, reason: 'json' });

@@ -1,4 +1,5 @@
-import type { Entry, Overrides, Product, Profile, Recipe, Weight } from './domain/nutrition';
+import type { DayMeals, Entry, Overrides, Product, Profile, Recipe, Water, Weight } from './domain/nutrition';
+import type { WeightGoal } from './domain/progress';
 import type { Pending } from './storage/backup';
 import { getAll, getMeta } from './storage/db';
 import { isNative } from './platform/files';
@@ -8,10 +9,10 @@ import { initStore, store, type Settings } from './ui/state';
 
 /** Loads everything, draws the first view and wires the events. Resolves when the first view is in the DOM. */
 export async function startApp(root: HTMLElement, db: IDBDatabase): Promise<void> {
-  const [products, entries, recipes, weights, pending, profile, overrides, settings] = await Promise.all([
-    getAll<Product>(db, 'products'), getAll<Entry>(db, 'entries'), getAll<Recipe>(db, 'recipes'), getAll<Weight>(db, 'weights'), getAll<Pending>(db, 'pending'),
-    getMeta<Profile | null>(db, 'profile', null), getMeta<Overrides>(db, 'overrides', {}), getMeta<Settings>(db, 'settings', { theme: 'system' })]);
-  initStore({ db, root, products, entries, recipes, weights, pending, profile, overrides, settings });
+  const [products, entries, recipes, weights, pending, days, water, profile, overrides, settings, goal] = await Promise.all([
+    getAll<Product>(db, 'products'), getAll<Entry>(db, 'entries'), getAll<Recipe>(db, 'recipes'), getAll<Weight>(db, 'weights'), getAll<Pending>(db, 'pending'), getAll<DayMeals>(db, 'days'), getAll<Water>(db, 'water'),
+    getMeta<Profile | null>(db, 'profile', null), getMeta<Overrides>(db, 'overrides', {}), getMeta<Settings>(db, 'settings', { theme: 'system' }), getMeta<WeightGoal | null>(db, 'goal', null)]);
+  initStore({ db, root, products, entries, recipes, weights, pending, days, water, goal, profile, overrides, settings: { ...settings, theme: settings.theme ?? 'system' } });
   (window as unknown as { __fuel?: unknown }).__fuel = store;   // read by the e2e tests
   applyTheme(); render(false);
   if (!profile) push({ t: 'profile', first: true });

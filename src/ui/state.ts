@@ -1,5 +1,6 @@
-import type { Entry, Meal, Overrides, Product, Profile, Recipe, Weight, Per100, Targets } from '../domain/nutrition';
-import { recipePer100, targets, MEALS } from '../domain/nutrition';
+import type { DayMeals, Entry, Meal, MealDef, Overrides, Product, Profile, Recipe, Water, Weight, Per100, Targets } from '../domain/nutrition';
+import { avg7, DEFAULT_MEALS, recipePer100, targets, tdee, MEALS } from '../domain/nutrition';
+import { paceKcal, waterTarget, type WeightGoal } from '../domain/progress';
 import type { Pending } from '../storage/backup';
 
 export type Tab = 'today' | 'products' | 'progress' | 'more';
@@ -10,17 +11,18 @@ export type Page =
   | { t: 'code'; meal: Meal }
   | { t: 'recipe'; id?: string }
   | { t: 'pickIng'; recipeId: string }
-  | { t: 'profile'; first?: boolean } | { t: 'backup' } | { t: 'about' };
-export interface Settings { theme: 'system' | 'light' | 'dark' }
+  | { t: 'profile'; first?: boolean } | { t: 'backup' } | { t: 'about' }
+  | { t: 'quick'; meal: Meal; entryId?: string } | { t: 'dayMeal' } | { t: 'meals' } | { t: 'goal' };
+export interface Settings { theme: 'system' | 'light' | 'dark'; meals?: MealDef[]; waterGoal?: number; adviceUntil?: string }
 export interface Store {
   db: IDBDatabase; root: HTMLElement;
   profile: Profile | null; overrides: Overrides; settings: Settings;
-  products: Product[]; entries: Entry[]; recipes: Recipe[]; weights: Weight[]; pending: Pending[];
+  products: Product[]; entries: Entry[]; recipes: Recipe[]; weights: Weight[]; pending: Pending[]; days: DayMeals[]; water: Water[]; goal: WeightGoal | null;
   ui: { tab: Tab; date: string; stack: Page[]; toast: { msg: string; undo?: () => void } | null; q: string; list: 'recent' | 'fav' | 'recipes' | 'all';
-    draft: Record<string, string>; recipeDraft: Recipe | null; err: string };
+    draft: Record<string, string>; recipeDraft: Recipe | null; err: string; prog: 'cal' | 'weight' | 'water'; month: string; sel: string; range: 30 | 90 | 0 };
 }
 export let store: Store = null as unknown as Store;
-export const initStore = (s: Omit<Store, 'ui'>): Store => { store = { ...s, ui: { tab: 'today', date: localDate(), stack: [], toast: null, q: '', list: 'recent', draft: {}, recipeDraft: null, err: '' } }; return store; };
+export const initStore = (s: Omit<Store, 'ui'>): Store => { store = { ...s, ui: { tab: 'today', date: localDate(), stack: [], toast: null, q: '', list: 'recent', draft: {}, recipeDraft: null, err: '', prog: 'cal', month: localDate().slice(0, 7), sel: localDate(), range: 90 } }; return store; };
 
 export function localDate(d = new Date()): string { const z = (n: number) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}`; }
 export const uid = (): string => { try { return crypto.randomUUID(); } catch { return Date.now().toString(36) + Math.random().toString(36).slice(2, 10); } };
@@ -39,9 +41,25 @@ export function food(kind: 'product' | 'recipe', id: string): Food | null {
 }
 export const year = (): number => new Date().getFullYear();
 export const DEFAULT_TARGETS: Targets = { kcal: 2000, p: 120, f: 65, c: 230 };
-export const myTargets = (): Targets => (store.profile ? targets(store.profile, year(), store.overrides) : { ...DEFAULT_TARGETS, ...store.overrides } as Targets);
-export const MEAL_NAME: Record<Meal, string> = { breakfast: 'Śniadanie', lunch: 'Obiad', dinner: 'Kolacja', snack: 'Przekąski' };
-export const MEAL_TO: Record<Meal, string> = { breakfast: 'śniadania', lunch: 'obiadu', dinner: 'kolacji', snack: 'przekąsek' };
+/** The person's targets. With a weight goal, energy follows its pace (unless set by hand); without a profile, defaults. */
+export function myTargets(): Targets {
+  if (!store.profile) return { ...DEFAULT_TARGETS, ...store.overrides } as Targets;
+  const o: Overrides = { ...store.overrides };
+  if (store.goal && o.kcal == null) { const kg = currentKg() ?? store.profile.weightKg; o.kcal = Math.round((tdee(store.profile, year()) + paceKcal(kg, store.goal)) / 10) * 10; }
+  return targets(store.profile, year(), o);
+}
+/** The 7-day average weight today, else the last weigh-in, else the profile weight. */
+export function currentKg(): number | null { const ws = store.weights; if (!ws.length) return store.profile?.weightKg ?? null; return avg7(ws, localDate()) ?? [...ws].sort((a, b) => a.date.localeCompare(b.date)).pop()!.kg; }
+export const waterGoal = (): number => store.settings.waterGoal ?? waterTarget(currentKg() ?? 75);
+export const mealPlan = (): MealDef[] => store.settings.meals?.length ? store.settings.meals : DEFAULT_MEALS;
+const DEFAULT_NAME = new Map(DEFAULT_MEALS.map(m => [m.id, m.name]));
+/** The meals of a day: its frozen list if it has one, else today's plan; meals that only exist in entries are kept at the end. */
+export function dayMeals(date: string): MealDef[] {
+  const base = store.days.find(d => d.date === date)?.meals ?? mealPlan();
+  const extra = [...new Set(store.entries.filter(e => e.date === date).map(e => e.meal))].filter(id => !base.some(m => m.id === id)).map(id => ({ id, name: DEFAULT_NAME.get(id) ?? 'Posiłek' }));
+  return [...base, ...extra];
+}
+export const mealName = (date: string, id: string): string => dayMeals(date).find(m => m.id === id)?.name ?? DEFAULT_NAME.get(id) ?? 'Posiłek';
 /** The meal that fits the time of day, used by the scan button on Today. */
-export function mealNow(d = new Date()): Meal { const h = d.getHours() + d.getMinutes() / 60; return h < 11 ? 'breakfast' : h < 16 ? 'lunch' : h < 21 ? 'dinner' : 'snack'; }
+export function mealNow(d = new Date(), date = localDate()): Meal { const ms = dayMeals(date); const h = d.getHours() + d.getMinutes() / 60; const k = Math.min(ms.length - 1, Math.max(0, Math.floor(((h - 6) / 16) * ms.length))); return ms[k]!.id; }
 export { MEALS };

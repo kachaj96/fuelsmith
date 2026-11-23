@@ -117,3 +117,37 @@ h1, h2, h3, p { margin: 0; }
 .page > .top { margin-top: env(safe-area-inset-top, 0px); }
 .pscroll { top: calc(56px + env(safe-area-inset-top, 0px)); padding-top: 0; }
 .cap1::first-letter { text-transform: uppercase; }
+
+/* 0.4 */
+.meal-h.two-ib { grid-template-columns: minmax(0, 1fr) auto var(--tap) var(--tap); }
+.meal-h.two-ib .ib:first-of-type { margin-right: 0; }
+.ent.rep { color: var(--muted); }
+.ent.rep .ico { width: 16px; height: 16px; vertical-align: -3px; }
+.wat { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: var(--tap-gap); align-items: center; }
+.wat .btn { padding: 0 var(--s3); }
+.drops { display: flex; gap: 4px; margin-top: var(--s1); }
+.drops i { flex: 1; height: 6px; border-radius: 3px; background: var(--field); }
+.drops i.on { background: var(--text); }
+.cal { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.cal .h { font-size: var(--t-cap); font-weight: 700; color: var(--muted); text-align: center; text-transform: uppercase; letter-spacing: .06em; padding-bottom: var(--s1); }
+.cal button { min-height: var(--tap); min-width: 0; border-radius: var(--r-in); border: 2px solid transparent; background: var(--field); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0; font-size: var(--t-cap); line-height: 1.1; }
+.cal button b { font-size: var(--t-meta); }
+.cal button.empty { background: none; border: 2px dashed var(--line); color: var(--muted); }
+.cal button.future { background: none; color: var(--muted); }
+.cal button.sel { border-color: var(--text); border-style: solid; }
+.cal button.today { box-shadow: inset 0 -3px 0 var(--accent); }
+.cal .k { color: var(--muted); font-weight: 400; }
+.cal .k.ok { color: var(--text); font-weight: 700; }
+.legend { display: flex; flex-wrap: wrap; gap: var(--s4); font-size: var(--t-meta); color: var(--muted); }
+.legend i { display: inline-block; width: 16px; height: 0; border-top: 2px solid var(--text); vertical-align: middle; margin-right: var(--s1); }
+.legend i.dash { border-top: 2px dashed var(--muted); }
+.legend i.dot { width: 6px; height: 6px; border: 0; border-radius: 50%; background: var(--muted); }
+.li.mrow { grid-template-columns: minmax(0, 1fr) var(--tap) var(--tap) var(--tap); gap: 0; }
+.li.mrow .inp { margin-right: var(--s2); }
+.li.mrow .ib { margin: 0; }
+.li.mrow .ib:last-child { margin-right: -12px; }
+.ib:disabled { color: var(--muted); opacity: .4; }
+/* the month grid uses part of the side gutter, so a day is a full 48 px target at 360 px; values at 13 px */
+.cal { margin: 0 -12px; gap: 2px; }
+.cal button { font-size: var(--t-meta); }
+.cal .k { font-size: var(--t-meta); }

@@ -113,10 +113,10 @@ for (const scheme of ['light', 'dark']) for (const [w, h] of [[360, 760], [412, 
   await audit(page, `${T} recipe`);
   await page.click('[data-a=saveRecipe]'); await closed(page); check(`${T} the recipe is listed`, (await page.locator('[data-a=item][data-kind=recipe]').count()) === 1);
   // 7. weight
-  await page.click('[data-a=tab][data-id=progress]'); await page.fill('#kg', '20'); await page.click('[data-a=saveWeight]');
+  await page.click('[data-a=tab][data-id=progress]'); await page.click('[data-a=prog][data-id=weight]'); await page.fill('#kg', '20'); await page.click('[data-a=saveWeight]');
   check(`${T} an impossible weight is refused`, (await page.locator('.err').count()) === 1);
   await page.fill('#kg', '80,4'); await page.click('[data-a=saveWeight]'); await page.waitForTimeout(200);
-  check(`${T} weight saved, 7-day average shown`, await txt(page, '#avg7') === '80,4kg');
+  check(`${T} weight saved, 7-day average shown`, await txt(page, '#avg7') === '80,4kg', await txt(page, '#avg7'));
   await audit(page, `${T} progress`);
   // 8. edit and delete an entry with undo
   await page.click('[data-a=tab][data-id=today]'); await page.click('.ent >> nth=0'); await page.fill('#grams', '200'); await page.click('[data-a=saveEntry]'); await closed(page);
@@ -130,6 +130,70 @@ for (const scheme of ['light', 'dark']) for (const [w, h] of [[360, 760], [412, 
   await page.click('[data-a=open][data-p=backup]'); await audit(page, `${T} backup`);
   await page.setInputFiles('#importFile', { name: 'x.json', mimeType: 'application/json', buffer: Buffer.from('{"app":"flexsmith","schema":1}') });
   await page.waitForTimeout(200); check(`${T} a sibling's backup is refused, data kept`, /To nie jest kopia Fuelsmith/.test((await page.textContent('.err')) ?? ''));
+  // ---- 0.4 ----
+  await page.click('[data-a=back]'); await page.click('[data-a=tab][data-id=today]');
+  // water with undo
+  await page.click('[data-a=water][data-v="250"]'); await page.click('[data-a=water][data-v="250"]'); await page.waitForTimeout(100);
+  check(`${T} water: 2 x 250 ml = 0,5 l of 2,5 l (30 ml x 80,4 kg, to 250 ml)`, (await page.textContent('#water')) === '0,5 l z 2,5 l', await page.textContent('#water'));
+  await page.click('.toast [data-a=undo]'); await page.waitForTimeout(150);
+  check(`${T} water undo`, (await page.textContent('#water')) === '0,3 l z 2,5 l', await page.textContent('#water'));
+  // a meal added to today and removed with undo
+  await page.click('[data-a=open][data-p=dayMeal]'); await audit(page, `${T} day meal`);
+  await page.click('[data-a=mname][data-v="Po treningu"]'); await page.click('[data-a=addDayMeal]'); await closed(page);
+  check(`${T} added meal shows on Today`, (await page.locator('.meal-h .b', { hasText: 'Po treningu' }).count()) === 1);
+  await page.click('[data-a=dropMeal][aria-label*="Po treningu"]'); await page.waitForTimeout(100);
+  check(`${T} an empty meal can be removed from the day`, (await page.locator('.meal-h .b', { hasText: 'Po treningu' }).count()) === 0);
+  await page.click('.toast [data-a=undo]'); await page.waitForTimeout(150);
+  check(`${T} removing a meal can be undone`, (await page.locator('.meal-h .b', { hasText: 'Po treningu' }).count()) === 1);
+  check(`${T} a meal with entries has no remove button`, (await page.locator('[data-a=dropMeal][aria-label*="Śniadanie"]').count()) === 0);
+  // quick calories
+  const left0 = await txt(page, '#left');
+  await page.click('.meal-h [data-a=open][data-p=add] >> nth=1'); await page.click('[data-a=open][data-p=quick]'); await audit(page, `${T} quick`);
+  await page.fill('#qname', 'Obiad na mieście'); await page.fill('#qkcal', '450'); await page.click('[data-a=saveQuick]'); await closed(page);
+  check(`${T} quick calories: 450 kcal less left`, Number(await txt(page, '#left')) === Number(left0) - 450, `${left0} -> ${await txt(page, '#left')}`);
+  // yesterday: quick 300 kcal in Kolacja, then repeat it today
+  await page.click('[data-a=day][data-d="-1"]'); await page.click('.meal-h [data-a=open][data-p=add][aria-label="Dodaj do: Kolacja"]'); await page.click('[data-a=open][data-p=quick]');
+  await page.fill('#qkcal', '300'); await page.click('[data-a=saveQuick]'); await closed(page);
+  await page.click('[data-a=day][data-d="1"]');
+  check(`${T} repeat from yesterday is offered on an empty meal`, (await page.locator('[data-a=repeatMeal]').count()) >= 1);
+  const left1 = Number(await txt(page, '#left')); await page.click('[data-a=repeatMeal]'); await page.waitForTimeout(150);
+  check(`${T} repeat copies yesterday's 300 kcal`, Number(await txt(page, '#left')) === left1 - 300);
+  check(`${T} week balance is shown`, (await page.locator('#week').count()) === 1);
+  await audit(page, `${T} today 0.4`);
+  // meal plan: preset and rename
+  await page.click('[data-a=tab][data-id=more]'); await page.click('[data-a=open][data-p=meals]'); await audit(page, `${T} meals`);
+  await page.click('[data-a=mpreset][data-k="0"]'); await page.waitForTimeout(100);
+  check(`${T} preset: 3 meals`, (await page.locator('[data-f=mrename]').count()) === 3);
+  await page.fill('[data-f=mrename][data-k="0"]', 'Pierwsze'); await page.locator('[data-f=mrename][data-k="0"]').dispatchEvent('change'); await page.waitForTimeout(100);
+  await page.click('[data-a=back]'); await page.click('[data-a=open][data-p=meals]');
+  check(`${T} renamed meal is kept`, (await page.inputValue('[data-f=mrename][data-k="0"]')) === 'Pierwsze');
+  await page.click('[data-a=back]'); await page.click('[data-a=tab][data-id=today]');
+  check(`${T} today keeps its own meals after the plan changed`, (await page.locator('.meal-h .b', { hasText: 'Przekąski' }).count()) === 1);
+  // calendar
+  await page.click('[data-a=tab][data-id=progress]'); await page.click('[data-a=prog][data-id=cal]'); await audit(page, `${T} calendar`);
+  check(`${T} calendar: days without entries are "?" (not zero)`, (await page.locator('.cal button.empty').count()) >= 1 && /nie liczą się jako 0/.test((await page.textContent('#calsum')) ?? ''));
+  check(`${T} calendar: today is filled`, (await page.locator('.cal button.today .k').textContent()) !== '?');
+  // weight goal: energy follows the pace (80,4 kg: BMR 1754 x 1.55 = 2718.7; 80.4 x 0.005 x 7700 / 7 = 442 -> 440; 2278.7 -> 2280)
+  await page.click('[data-a=prog][data-id=weight]'); await page.click('[data-a=open][data-p=goal]'); await page.fill('#gkg', '75'); await audit(page, `${T} goal`);
+  await page.click('[data-a=saveGoal]'); await closed(page);
+  check(`${T} goal set: forecast waits for 4 weigh-ins`, /4 pomiarów/.test((await page.textContent('#forecast')) ?? ''));
+  await page.click('[data-a=tab][data-id=today]');
+  check(`${T} goal: daily target 2280 kcal`, /z 2 280 kcal/.test((await page.textContent('.stack')) ?? ''));
+  // advice and the real need, from 3 weeks of data put straight into the app state (no network, no clock tricks)
+  await page.evaluate(() => { const S = window.__fuel; const t = new Date(); const day = n => { const d = new Date(t); d.setDate(d.getDate() - n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+    S.weights = Array.from({ length: 22 }, (_, i) => ({ date: day(21 - i), kg: 84.6 - i * 0.2 }));
+    S.entries = [...S.entries, ...Array.from({ length: 21 }, (_, i) => ({ id: 'h' + i, date: day(i + 1), meal: 'lunch', productId: 'quick', name: 'x', grams: 100, per100: { kcal: 1500, p: 0, f: 0, c: 0 }, at: 0, quick: true }))]; });
+  await page.click('[data-a=tab][data-id=progress]'); await page.click('[data-a=prog][data-id=weight]');
+  check(`${T} losing 1,4 kg a week: "too fast" with +200 kcal`, /Za szybko/.test((await page.textContent('#advice')) ?? '') && /\+200 kcal/.test((await page.textContent('#advice')) ?? ''));
+  check(`${T} the forecast shows a date range`, /Zakres:/.test((await page.textContent('#forecast')) ?? ''));
+  check(`${T} real need is shown with its basis`, /uzupełnionych dni z 21/.test((await page.textContent('#need')) ?? ''));
+  await audit(page, `${T} weight`);
+  await page.click('[data-a=applyAdvice]'); await page.waitForTimeout(150);
+  check(`${T} apply sets the calorie target and can be undone`, /Cel kalorii:/.test((await page.textContent('.toast')) ?? '') && await page.evaluate(() => window.__fuel.overrides.kcal != null));
+  await page.click('.toast [data-a=undo]'); await page.waitForTimeout(150);
+  check(`${T} undo removes the override`, await page.evaluate(() => window.__fuel.overrides.kcal == null));
+  await page.click('[data-a=prog][data-id=water]'); await audit(page, `${T} water`);
+  check(`${T} water history shows "brak" for empty days`, (await page.locator('.mac', { hasText: 'brak' }).count()) >= 1);
   check(`${T} no page errors`, errors.length === 0, errors.join(' | '));
   await ctx.close();
 }

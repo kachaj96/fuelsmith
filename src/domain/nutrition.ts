@@ -22,10 +22,25 @@ export interface Product {
   createdAt: number; updatedAt: number;
   deletedAt?: number;
 }
-export type Meal = 'breakfast' | 'lunch' | 'dinner' | 'snack';
-export const MEALS: Meal[] = ['breakfast', 'lunch', 'dinner', 'snack'];
+/** A meal is an id from the person's own list (0.4). The four ids of 0.3 stay valid, so old entries need no migration. */
+export type Meal = string;
+export interface MealDef { id: Meal; name: string }
+export const DEFAULT_MEALS: MealDef[] = [{ id: 'breakfast', name: 'Śniadanie' }, { id: 'lunch', name: 'Obiad' }, { id: 'dinner', name: 'Kolacja' }, { id: 'snack', name: 'Przekąski' }];
+export const MEALS: Meal[] = DEFAULT_MEALS.map(m => m.id);
+export const MAX_MEALS = 8;
+export const MEAL_SUGGESTIONS = ['Śniadanie', 'Drugie śniadanie', 'Obiad', 'Podwieczorek', 'Kolacja', 'Przekąska', 'Przed treningiem', 'Po treningu', 'Na mieście', 'Shake'];
+export const MEAL_PRESETS: { name: string; meals: string[] }[] = [
+  { name: '3 posiłki', meals: ['Śniadanie', 'Obiad', 'Kolacja'] },
+  { name: '4 posiłki', meals: ['Śniadanie', 'Obiad', 'Kolacja', 'Przekąski'] },
+  { name: '5 posiłków', meals: ['Śniadanie', 'Drugie śniadanie', 'Obiad', 'Podwieczorek', 'Kolacja'] },
+  { name: 'Dzień treningowy', meals: ['Śniadanie', 'Obiad', 'Przed treningiem', 'Po treningu', 'Kolacja'] },
+  { name: 'Post 16:8', meals: ['Pierwszy posiłek', 'Drugi posiłek', 'Przekąska'] },
+];
+/** The meals of one day, frozen once the day has entries, so a later change of the plan does not move old entries. */
+export interface DayMeals { date: string; meals: MealDef[] }
+export interface Water { id: string; date: string; ml: number; at: number }
 /** A diary line. It keeps the values of the day it was written, so a later change to the product does not rewrite history. */
-export interface Entry { id: string; date: string; meal: Meal; productId: string; name: string; grams: number; per100: Per100; at: number }
+export interface Entry { id: string; date: string; meal: Meal; productId: string; name: string; grams: number; per100: Per100; at: number; /** quick calories without a product */ quick?: boolean }
 export interface Ingredient { productId: string; name: string; grams: number; per100: Per100 }
 export interface Recipe { id: string; name: string; items: Ingredient[]; /** weight after cooking; empty = the sum of the raw ingredients */ cooked?: number; servings?: number; createdAt: number; updatedAt: number; deletedAt?: number }
 export interface Weight { date: string; kg: number }
@@ -46,7 +61,7 @@ export function forGrams(per: Per100, grams: number): Per100 {
   return out;
 }
 export function sum(xs: Per100[]): Per100 {
-  return xs.reduce<Per100>((a, x) => ({ kcal: a.kcal + x.kcal, p: r1(a.p + x.p), f: r1(a.f + x.f), c: r1(a.c + x.c) }), { kcal: 0, p: 0, f: 0, c: 0 });
+  return xs.reduce<Per100>((a, x) => ({ kcal: a.kcal + x.kcal, p: r1(a.p + x.p), f: r1(a.f + x.f), c: r1(a.c + x.c), fiber: r1((a.fiber ?? 0) + (x.fiber ?? 0)) }), { kcal: 0, p: 0, f: 0, c: 0, fiber: 0 });
 }
 export const entryMacros = (e: Pick<Entry, 'per100' | 'grams'>): Per100 => forGrams(e.per100, e.grams);
 export const dayTotals = (entries: Entry[]): Per100 => sum(entries.map(entryMacros));
@@ -69,6 +84,8 @@ export function bmr(p: Profile, year: number): number {
   const age = year - p.birthYear;
   return 10 * p.weightKg + 6.25 * p.heightCm - 5 * age + (p.sex === 'm' ? 5 : -161);
 }
+/** Energy that keeps the weight, by the formula (BMR times activity). */
+export const tdee = (p: Profile, year: number): number => bmr(p, year) * ACTIVITY[p.activity];
 export function targets(p: Profile, year: number, o: Overrides = {}): Targets {
   const tdee = bmr(p, year) * ACTIVITY[p.activity];
   const kcal = o.kcal ?? Math.round((tdee * GOAL_FACTOR[p.goal]) / 10) * 10;
@@ -89,9 +106,9 @@ export function recipePer100(r: Pick<Recipe, 'items' | 'cooked'>): Per100 {
 /* ---- body weight: the 7-day average smooths out water ---- */
 const dayNum = (d: string): number => Math.round(Date.UTC(+d.slice(0, 4), +d.slice(5, 7) - 1, +d.slice(8, 10)) / 864e5);
 /** Average of the weights in the 7 days ending on `date` (inclusive). null when there is none. */
-export function avg7(ws: Weight[], date: string): number | null {
+export function avg7(ws: Weight[], date: string, round = true): number | null {
   const end = dayNum(date); const xs = ws.filter(w => { const n = dayNum(w.date); return n <= end && n > end - 7; });
-  return xs.length ? r1(xs.reduce((a, w) => a + w.kg, 0) / xs.length) : null;
+  if (!xs.length) return null; const v = xs.reduce((a, w) => a + w.kg, 0) / xs.length; return round ? r1(v) : v;
 }
 /** Change of the 7-day average against the week before. */
 export function weeklyChange(ws: Weight[], date: string): number | null {
