@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="pl" data-smith-product="fuelsmith">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#F4F5F6" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0B0E11" media="(prefers-color-scheme: dark)">
+  <link rel="icon" type="image/svg+xml" href="./favicon.svg">
+  <title>Fuelsmith</title>
+  <script>
+    // Theme, language and motion before first paint. If storage is blocked the CSS falls back to the system theme.
+    try {
+      var th = localStorage.getItem('fuelsmith.theme') || 'system';
+      var dk = th === 'dark' || (th === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
+      var r = document.documentElement;
+      r.dataset.smithTheme = dk ? 'dark' : 'light';
+      if (localStorage.getItem('fuelsmith.lang') === 'en') r.lang = 'en';
+      if (localStorage.getItem('fuelsmith.motion') === 'off') r.dataset.motion = 'reduce';
+    } catch (e) { void e; }
+    // The start animation plays on a real launch only: a reload inside the same session (sessionStorage survives it) skips it.
+    try { if (sessionStorage.getItem('smith.splash') === 'played') document.documentElement.dataset.splash = 'skip'; } catch (e) { void e; }
+  </script>
+  <style>
+    /* Start screen (Smith Motion Language, docs/MOTION.md). Painted before the bundle loads; src/splash.ts decides when it leaves.
+       Timeline in ms: tile 0-420, symbol 300-1040 (masks drawn along the real shapes), wordmark 940-1240, hold to 1600, then a 260 ms fade. */
+    :root{--sp-spring:cubic-bezier(.2,.9,.25,1.04);--sp-std:cubic-bezier(.4,0,.2,1);--sp-out:cubic-bezier(.2,0,0,1)}
+    html,body{margin:0;background:#F4F5F6}
+    html[data-smith-theme="dark"],html[data-smith-theme="dark"] body{background:#0B0E11}
+    #splash{position:fixed;inset:0;z-index:100;display:grid;place-content:center;justify-items:center;gap:22px;background:#F4F5F6;transition:opacity .26s var(--sp-std)}
+    html[data-smith-theme="dark"] #splash{background:#0B0E11}
+    #splash.out{opacity:0;pointer-events:none}
+    html[data-splash="skip"] #splash{display:none}
+    .sp-tile{width:120px;height:120px;display:block;animation:sp-tile .42s var(--sp-spring) both}
+    .sp-rv{stroke-dasharray:1.05;stroke-dashoffset:1.05;animation:sp-draw var(--t) var(--d) var(--sp-std) forwards}
+    .sp-name{margin:0;font:700 28px/1 Barlow,system-ui,sans-serif;letter-spacing:-.02em;color:#151A21;opacity:0;animation:sp-name .3s .94s var(--sp-out) forwards}
+    html[data-smith-theme="dark"] .sp-name{color:#E9EDF1}
+    .sp-end{position:absolute;width:0;height:0;animation:sp-end 1.6s linear both}
+    .sp-hint{position:absolute;left:0;right:0;bottom:11%;margin:0;padding:0 28px;text-align:center;font:600 14px/1.4 system-ui,sans-serif;color:#4B5563}
+    html[data-smith-theme="dark"] .sp-hint{color:#A3ADB8}
+    .sp-hint[hidden],.sp-retry[hidden]{display:none}
+    .sp-retry{display:block;margin:12px auto 0;min-height:48px;padding:0 20px;border:1.5px solid #A8325A;border-radius:8px;background:none;color:#A8325A;font:700 15px system-ui,sans-serif}
+    html[data-smith-theme="dark"] .sp-retry{border-color:#F28BAE;color:#F28BAE}
+    #splash.paused *{animation-play-state:paused}
+    @keyframes sp-tile{0%{opacity:0;transform:scale(.88)}35%{opacity:1}100%{opacity:1;transform:none}}
+    @keyframes sp-draw{to{stroke-dashoffset:0}}
+    @keyframes sp-name{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+    @keyframes sp-end{from{opacity:.99}to{opacity:1}}
+    @media (prefers-reduced-motion:reduce){
+      .sp-tile,.sp-name,.sp-rv,.sp-end{animation:none}.sp-rv{stroke-dashoffset:0}.sp-name{opacity:1}#splash{transition-duration:.12s}
+    }
+    html[data-motion="reduce"] .sp-tile,html[data-motion="reduce"] .sp-name,html[data-motion="reduce"] .sp-rv,html[data-motion="reduce"] .sp-end{animation:none}
+    html[data-motion="reduce"] .sp-rv{stroke-dashoffset:0}html[data-motion="reduce"] .sp-name{opacity:1}html[data-motion="reduce"] #splash{transition-duration:.12s}
+  </style>
+</head>
+<body>
+  <div id="splash" role="status" aria-label="Fuelsmith">
+    <!-- splash-art:start --><svg class="sp-tile" viewBox="0 0 1024 1024" aria-hidden="true" focusable="false"><defs><mask id="sp-m-drop" maskUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024"><path class="sp-rv" pathLength="1" fill="none" stroke="#fff" stroke-width="520" style="--d:300ms;--t:700ms" d="M512 120L512 900"/></mask></defs><rect width="1024" height="1024" rx="229" fill="#A8325A"/><g mask="url(#sp-m-drop)"><path fill="#FFFFFF" d="M512 176C590 300 748 452 748 628A236 236 0 0 1 276 628C276 452 434 300 512 176Z"/></g></svg><!-- splash-art:end -->
+    <p class="sp-name">Fuelsmith</p>
+    <i class="sp-end" aria-hidden="true"></i>
+    <p class="sp-hint" aria-live="polite" hidden></p>
+  </div>
+  <div id="app" inert></div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
