@@ -223,27 +223,27 @@ for (const scheme of ['light', 'dark']) for (const [w, h] of [[360, 760], [412, 
   await page.evaluate(() => { document.querySelector('.sheet').__same = 1; const b = document.querySelector('.sheet-b'); b.scrollTop = 40; window.__st = b.scrollTop; });
   await page.click('[data-a=offToggle][data-id=full]'); await page.click('[data-a=offToggle][data-id=full]');
   check(`${T} filters: a tap marks the chip without redrawing the sheet (no close and open, scroll kept)`, await page.evaluate(() => document.querySelector('.sheet').__same === 1 && document.querySelector('.sheet-b').scrollTop === window.__st));
-  await page.click('[data-a=offSort][data-id=protein]'); await page.click('[data-a=offCat][data-id=dairy]'); await page.click('[data-a=offApply]'); await page.waitForTimeout(250);
+  await page.click('[data-a=offSort][data-id=protein]'); await page.click('[data-a=offCat][data-id=dairy]'); await page.click('[data-a=offApply]'); await page.waitForSelector('#olist');
   check(`${T} search: a category is a new request`, searches.length === 2 && /categories_tags:"en:dairies"/.test(searches[1].searchParams.get('q')));
   { const names = await page.locator('#olist .nm').allTextContents(); check(`${T} search: protein per 100 kcal, the bad label last`, names.join('|') === 'Skyr naturalny|Skyr pitny wanilia|Serek typu skyr', names.join('|')); }
   await page.click('[data-a=offSheet]'); await page.click('[data-a=offSort][data-id=kcal]'); await page.click('[data-a=offApply]'); await page.waitForTimeout(150);
   check(`${T} search: sorting alone sends nothing`, searches.length === 2 && (await page.locator('[data-a=offSheet]').count()) === 1 && (await page.locator('.sheet').count()) === 0);
-  await page.click('[data-a=offMore]'); await page.waitForTimeout(250);
+  await page.click('[data-a=offMore]'); await page.waitForFunction(() => document.querySelectorAll('#olist [data-a=offPick]').length === 5);
   check(`${T} search: next page adds results`, searches.length === 3 && searches[2].searchParams.get('page') === '2' && (await page.locator('#olist [data-a=offPick]').count()) === 5);
   check(`${T} search: incomplete data is marked`, (await page.locator('#olist .tag', { hasText: 'niepełne dane' }).count()) === 1);
-  await page.click('[data-a=offDrop][data-id="poland:"]'); await page.waitForTimeout(250);
+  await page.click('[data-a=offDrop][data-id="poland:"]'); await page.waitForSelector('#olist');
   check(`${T} search: removing a filter chip searches again without it`, searches.length === 4 && !/countries_tags/.test(searches[3].searchParams.get('q')));
   const before = await page.evaluate(() => window.__fuel.products.length);
   await page.click('#olist [data-a=offPick] >> text=Skyr naturalny'); await page.waitForSelector('#pkcal');
   check(`${T} search: a result opens like a scan, 150 g pack`, (await page.locator('.note.warn').count()) === 1 && /5900000000015/.test((await page.textContent('.page .meta')) ?? ''));
   await page.click('[data-a=back]'); await page.click('#olist [data-a=offPick] >> text=Skyr naturalny'); await page.waitForSelector('#pkcal');
   check(`${T} search: the same product twice is saved once`, await page.evaluate(() => window.__fuel.products.length) === before + 1);
-  await page.click('[data-a=back]'); await page.click('[data-a=offMore]'); await page.waitForTimeout(250); await page.click('#olist [data-a=offPick] >> text=Skyr mango'); await page.waitForSelector('#kcal');
+  await page.click('[data-a=back]'); await page.click('[data-a=offMore]'); await page.click('#olist [data-a=offPick] >> text=Skyr mango'); await page.waitForSelector('#kcal');
   check(`${T} search: a result with gaps opens the form, fat left empty`, (await page.inputValue('#kcal')) === '90' && (await page.inputValue('#f')) === '');
   await page.click('[data-a=back]');
-  await page.fill('#oq', 'nicnie'); await page.press('#oq', 'Enter'); await page.waitForTimeout(250);
+  await page.fill('#oq', 'nicnie'); await page.press('#oq', 'Enter'); await page.waitForSelector('.page .note');
   check(`${T} search: no results says what to try`, /Nic nie znaleziono/.test((await page.textContent('.page')) ?? '') && (await page.locator('.page [data-a=open][data-p=form]').count()) === 1);
-  await page.fill('#oq', 'siec'); await page.click('[data-a=offGo]'); await page.waitForTimeout(250);
+  await page.fill('#oq', 'siec'); await page.click('[data-a=offGo]'); await page.waitForSelector('.page .note.warn');
   check(`${T} search: no connection is said plainly`, /Brak połączenia/.test((await page.textContent('.page')) ?? ''));
   await audit(page, `${T} search offline`);
   for (let i = 0; i < 6; i++) { await page.click('[data-a=offGo]'); await page.waitForTimeout(60); }
