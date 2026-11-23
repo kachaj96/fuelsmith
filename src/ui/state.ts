@@ -2,6 +2,8 @@ import type { DayMeals, Entry, Meal, MealDef, Overrides, Product, Profile, Recip
 import { avg7, DEFAULT_MEALS, recipePer100, targets, tdee, MEALS } from '../domain/nutrition';
 import { paceKcal, waterTarget, type WeightGoal } from '../domain/progress';
 import type { Pending } from '../storage/backup';
+import type { OffProduct } from '../domain/off';
+import { DEFAULT_FILTERS, type Filters } from '../domain/search';
 
 export type Tab = 'today' | 'products' | 'progress' | 'more';
 export type Page =
@@ -12,17 +14,25 @@ export type Page =
   | { t: 'recipe'; id?: string }
   | { t: 'pickIng'; recipeId: string }
   | { t: 'profile'; first?: boolean } | { t: 'backup' } | { t: 'about' }
-  | { t: 'quick'; meal: Meal; entryId?: string } | { t: 'dayMeal' } | { t: 'meals' } | { t: 'goal' };
+  | { t: 'quick'; meal: Meal; entryId?: string } | { t: 'dayMeal' } | { t: 'meals' } | { t: 'goal' }
+  | { t: 'offs'; meal?: Meal };
+/** The Open Food Facts search: what was asked, the results so far and the filter sheet. */
+export interface OffSearch { q: string; f: Filters; draftF: Filters; sheet: boolean; page: number; hits: OffProduct[]; count: number; pages: number; status: 'idle' | 'loading' | 'ok' | 'offline' | 'error' | 'limit'; wait: number; detail?: string }
 export interface Settings { theme: 'system' | 'light' | 'dark'; meals?: MealDef[]; waterGoal?: number; adviceUntil?: string }
 export interface Store {
   db: IDBDatabase; root: HTMLElement;
   profile: Profile | null; overrides: Overrides; settings: Settings;
   products: Product[]; entries: Entry[]; recipes: Recipe[]; weights: Weight[]; pending: Pending[]; days: DayMeals[]; water: Water[]; goal: WeightGoal | null;
   ui: { tab: Tab; date: string; stack: Page[]; toast: { msg: string; undo?: () => void } | null; q: string; list: 'recent' | 'fav' | 'recipes' | 'all';
-    draft: Record<string, string>; recipeDraft: Recipe | null; err: string; prog: 'cal' | 'weight' | 'water'; month: string; sel: string; range: 30 | 90 | 0 };
+    draft: Record<string, string>; recipeDraft: Recipe | null; err: string; prog: 'cal' | 'weight' | 'water'; month: string; sel: string; range: 30 | 90 | 0; off: OffSearch };
 }
 export let store: Store = null as unknown as Store;
-export const initStore = (s: Omit<Store, 'ui'>): Store => { store = { ...s, ui: { tab: 'today', date: localDate(), stack: [], toast: null, q: '', list: 'recent', draft: {}, recipeDraft: null, err: '', prog: 'cal', month: localDate().slice(0, 7), sel: localDate(), range: 90 } }; return store; };
+export const initStore = (s: Omit<Store, 'ui'>): Store => { store = { ...s, ui: { tab: 'today', date: localDate(), stack: [], toast: null, q: '', list: 'recent', draft: {}, recipeDraft: null, err: '', prog: 'cal', month: localDate().slice(0, 7), sel: localDate(), range: 90, off: { q: '', f: loadFilters(), draftF: loadFilters(), sheet: false, page: 0, hits: [], count: 0, pages: 0, status: 'idle', wait: 0 } } }; return store; };
+/* Search filters and recent searches are conveniences: kept in localStorage under fuelsmith.*, not in the backup. */
+export function loadFilters(): Filters { try { const j = JSON.parse(localStorage.getItem('fuelsmith.searchFilters') ?? 'null'); if (j && typeof j === 'object') return { ...DEFAULT_FILTERS, ...j, cats: Array.isArray(j.cats) ? j.cats : [], labels: Array.isArray(j.labels) ? j.labels : [] }; } catch { /* none */ } return { ...DEFAULT_FILTERS }; }
+export function saveFilters(f: Filters): void { try { localStorage.setItem('fuelsmith.searchFilters', JSON.stringify(f)); } catch { /* private mode */ } }
+export function recentSearches(): string[] { try { const j = JSON.parse(localStorage.getItem('fuelsmith.recentSearches') ?? '[]'); return Array.isArray(j) ? j.filter((x): x is string => typeof x === 'string').slice(0, 5) : []; } catch { return []; } }
+export function rememberSearch(q: string): void { const t = q.trim(); if (!t) return; const xs = [t, ...recentSearches().filter(x => x.toLowerCase() !== t.toLowerCase())].slice(0, 5); try { localStorage.setItem('fuelsmith.recentSearches', JSON.stringify(xs)); } catch { /* private mode */ } }
 
 export function localDate(d = new Date()): string { const z = (n: number) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}`; }
 export const uid = (): string => { try { return crypto.randomUUID(); } catch { return Date.now().toString(36) + Math.random().toString(36).slice(2, 10); } };

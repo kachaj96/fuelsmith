@@ -3,7 +3,8 @@ import { addDays, avg7, dayTotals, entryMacros, forGrams, looksWrong, kcalFromMa
 import { advise, dayKcal, fiberTarget, forecast, paceKcal, PACE_PCT, planWeeks, realNeed, weekBalance, type Pace } from '../domain/progress';
 import { PART_PATHS, RADIUS, TILE } from '../brand-art';
 import { VERSION } from '../version';
-import { currentKg, dayMeals, food, liveProducts, liveRecipes, localDate, mealName, mealNow, mealPlan, myTargets, page, productById, recipeById, store, waterGoal, year, type Page } from './state';
+import { CATEGORIES, LABELS, SORTS, activeCount, sortHits, type Filters } from '../domain/search';
+import { currentKg, recentSearches, dayMeals, food, liveProducts, liveRecipes, localDate, mealName, mealNow, mealPlan, myTargets, page, productById, recipeById, store, waterGoal, year, type Page } from './state';
 
 export const esc = (s: unknown): string => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
 const IC: Record<string, string> = {
@@ -13,7 +14,7 @@ const IC: Record<string, string> = {
   scan: '<path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M7 9v6M10 9v6M13 9v6M17 9v6"/>',
   heart: '<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.5A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/>', heartf: '<path fill="currentColor" d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.5A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/>',
   trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>', x: '<path d="M18 6L6 18M6 6l12 12"/>', refresh: '<path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/>',
-  edit: '<path d="M4 20h4L19 9l-4-4L4 16z"/>', copy: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>', up: '<path d="M6 15l6-6 6 6"/>', down: '<path d="M6 9l6 6 6-6"/>',
+  edit: '<path d="M4 20h4L19 9l-4-4L4 16z"/>', search: '<circle cx="11" cy="11" r="7"/><path d="M16.5 16.5L21 21"/>', copy: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>', up: '<path d="M6 15l6-6 6 6"/>', down: '<path d="M6 9l6 6 6-6"/>',
 };
 export const ico = (n: string): string => `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false">${IC[n] ?? ''}</svg>`;
 const mark = (s = 24): string => `<svg viewBox="0 0 1024 1024" width="${s}" height="${s}" aria-hidden="true"><rect width="1024" height="1024" rx="${RADIUS}" fill="${TILE}"/>${PART_PATHS.map(d => `<path fill="#fff" d="${d}"/>`).join('')}</svg>`;
@@ -66,6 +67,14 @@ const foodRow = (kind: 'product' | 'recipe', id: string, meal?: Meal): string =>
   const f = food(kind, id); if (!f) return '';
   return `<button class="li" data-a="item" data-kind="${kind}" data-id="${id}"${meal ? ` data-meal="${meal}"` : ''}><span><span class="nm">${esc(f.name)}</span><br><span class="sub">${kind === 'recipe' ? '<span class="tag">przepis</span> · ' : ''}${kc(f.per100.kcal)} kcal / 100 g${f.sub && kind === 'product' ? ' · ' + esc(f.sub) : ''}</span></span>${ico('chev')}</button>`;
 };
+/** The way into Open Food Facts from a search field: the button with the typed text, or recent searches when the field is empty. */
+function offEntry(primary: boolean, meal?: Meal): string {
+  const q = store.ui.q.trim(); const m = meal ? ` data-meal="${esc(meal)}"` : '';
+  if (q.length >= 2) return `<button class="btn ${primary ? 'pri ' : ''}block" data-a="offSearch"${m}>${ico('search')}<span class="clip">Szukaj „${esc(q)}” w Open Food Facts</span></button>`;
+  if (q) return '';
+  const rs = recentSearches(); if (!rs.length) return primary ? '<div class="meta">Wpisz nazwę, żeby szukać też w Open Food Facts.</div>' : '';
+  return `<div class="cap">Ostatnio w Open Food Facts</div><div class="chips">${rs.map(r => `<button class="chip" data-a="offSearch" data-q="${esc(r)}"${m}>${esc(r)}</button>`).join('')}</div>`;
+}
 function filtered(q: string): { products: string[]; recipes: string[] } {
   const s = q.trim().toLowerCase(); const hit = (t: string) => !s || t.toLowerCase().includes(s);
   return { products: liveProducts().filter(p => hit(`${p.name} ${p.brand ?? ''} ${p.ean ?? ''}`)).sort((a, b) => a.name.localeCompare(b.name, 'pl')).map(p => p.id), recipes: liveRecipes().filter(r => hit(r.name)).sort((a, b) => a.name.localeCompare(b.name, 'pl')).map(r => r.id) };
@@ -74,7 +83,8 @@ export function viewProducts(): string {
   const { products, recipes } = filtered(store.ui.q);
   const pend = store.pending.map(p => `<div class="li has-ib"><span><span class="nm">EAN ${esc(p.ean)}</span><br><span class="sub">zeskanowany bez internetu</span></span><button class="btn" data-a="retry" data-ean="${esc(p.ean)}">${ico('refresh')}Sprawdź</button><button class="ib" data-a="dropPending" data-ean="${esc(p.ean)}" aria-label="Usuń kod ${esc(p.ean)}">${ico('x')}</button></div>`).join('');
   return `${brandTop()}<div class="stack"><div class="pad"><h1 class="title" id="page-title">Produkty</h1>
-    <div class="inp"><input id="q" data-f="q" type="search" inputmode="search" placeholder="Szukaj nazwy, marki albo kodu" value="${esc(store.ui.q)}" aria-label="Szukaj"></div>
+    <div class="inp"><input id="q" data-f="q" type="search" inputmode="search" enterkeyhint="search" placeholder="Szukaj nazwy, marki albo kodu" value="${esc(store.ui.q)}" aria-label="Szukaj"></div>
+    <div data-live="offbtn">${offEntry(true)}</div>
     <div class="g2"><button class="btn" data-a="open" data-p="form">${ico('plus')}Nowy produkt</button><button class="btn" data-a="open" data-p="recipe">${ico('plus')}Nowy przepis</button></div></div>
     ${pend ? `<div class="pad"><div class="cap">Do uzupełnienia</div><div class="card list">${pend}</div></div>` : ''}
     <div class="pad"><div class="cap">Przepisy</div><div class="card list" data-live="rlist">${recipes.map(id => foodRow('recipe', id)).join('') || '<div class="empty">Brak przepisów. Przepis liczy makro na 100 g gotowego dania.</div>'}</div></div>
@@ -181,7 +191,8 @@ function pageAdd(meal: Meal): string {
   return `${backTop('Dodaj do: ' + mealName(store.ui.date, meal))}<div class="scroll pscroll"><div class="stack"><div class="pad">
     <button class="btn pri block" data-a="scan" data-meal="${esc(meal)}">${ico('scan')}Skanuj kod</button>
     <div class="g3"><button class="btn" data-a="open" data-p="code" data-meal="${esc(meal)}">Wpisz kod</button><button class="btn" data-a="open" data-p="form" data-meal="${esc(meal)}">Z etykiety</button><button class="btn" data-a="open" data-p="quick" data-meal="${esc(meal)}">Szybkie kcal</button></div>
-    <div class="inp"><input id="q" data-f="q" type="search" inputmode="search" placeholder="Szukaj w moich produktach" value="${esc(store.ui.q)}" aria-label="Szukaj"></div>
+    <div class="inp"><input id="q" data-f="q" type="search" inputmode="search" enterkeyhint="search" placeholder="Szukaj w moich produktach" value="${esc(store.ui.q)}" aria-label="Szukaj"></div>
+    <div data-live="offbtn">${offEntry(false, meal)}</div>
     <div data-live="atabs">${store.ui.q.trim() ? '' : `<div class="tabs" role="tablist">${[['recent', 'Ostatnie'], ['fav', 'Ulubione'], ['recipes', 'Przepisy'], ['all', 'Wszystkie']].map(([k, l]) => `<button role="tab" data-a="list" data-id="${k}" aria-selected="${L === k}">${l}</button>`).join('')}</div>`}</div>
     <div class="card list" id="alist" data-live="alist">${list || `<div class="empty">${store.ui.q.trim() ? 'Nic nie pasuje.' : empty}</div>`}</div></div></div></div>`;
 }
@@ -312,8 +323,8 @@ function pageBackup(): string {
 function pageAbout(): string {
   return `${backTop('O aplikacji')}<div class="scroll pscroll"><div class="stack"><div class="pad">
     <div class="row">${mark(48)}<div><div class="b">Fuelsmith ${esc(VERSION)}</div><div class="meta">Dziennik jedzenia, offline, dane w telefonie</div></div></div>
-    <div class="card"><div class="b">Skąd są dane produktów</div><div class="meta">Po zeskanowaniu kodu aplikacja pyta Open Food Facts (openfoodfacts.org), otwartą bazę produktów tworzoną przez użytkowników. Dane są na licencji Open Database License (ODbL). Mogą mieć błędy: porównaj je z etykietą przy pierwszym skanie.</div></div>
-    <div class="card"><div class="b">Prywatność</div><div class="meta">Do Open Food Facts wysyłany jest tylko numer kodu kreskowego. Dziennik, waga i cele zostają w telefonie. Nie ma konta ani serwera. Skaner rozpoznaje kod w telefonie.</div></div>
+    <div class="card"><div class="b">Skąd są dane produktów</div><div class="meta">Po zeskanowaniu kodu albo wyszukaniu nazwy aplikacja pyta Open Food Facts (openfoodfacts.org), otwartą bazę produktów tworzoną przez użytkowników. Dane są na licencji Open Database License (ODbL). Mogą mieć błędy: porównaj je z etykietą przy pierwszym skanie.</div></div>
+    <div class="card"><div class="b">Prywatność</div><div class="meta">Do Open Food Facts wysyłany jest tylko numer kodu kreskowego albo wpisany tekst wyszukiwania z filtrami. Ostatnie wyszukiwania zapisują się tylko w telefonie. Dziennik, waga i cele zostają w telefonie. Nie ma konta ani serwera. Skaner rozpoznaje kod w telefonie.</div></div>
     <div class="card"><div class="b">Ważne</div><div class="meta">Cele i przeliczenia to szacunki, nie porada medyczna.</div></div></div></div></div>`;
 }
 function pageQuick(p: Extract<Page, { t: 'quick' }>): string {
@@ -374,12 +385,58 @@ function pageGoal(): string {
     <button class="btn pri block" data-a="saveGoal" ${cur == null ? 'disabled' : ''}>Zapisz cel</button>
     ${g ? `<button class="btn danger block" data-a="delGoal">${ico('trash')}Usuń cel</button>` : ''}</div></div></div>`;
 }
+/* ---------------- 0.5: Open Food Facts search ---------------- */
+const filterChips = (f: Filters): [string, string][] => [
+  ...CATEGORIES.filter(c => f.cats.includes(c.id)).map(c => [`cat:${c.id}`, c.name] as [string, string]),
+  ...LABELS.filter(l => f.labels.includes(l.id)).map(l => [`label:${l.id}`, l.name] as [string, string]),
+  ...(f.poland ? [['poland:', 'W Polsce'] as [string, string]] : []), ...(f.full ? [['full:', 'Pełne makro'] as [string, string]] : [])];
+function offRow(i: number): string {
+  const x = store.ui.off.hits[i]!; const v = x.per100!; const bad = looksWrong(v);
+  const sub = [x.brand, x.pack ? `${x.pack} g` : '', `B ${n1(v.p)} · T ${n1(v.f)} · W ${n1(v.c)}`].filter(Boolean).join(' · ');
+  return `<button class="li" data-a="offPick" data-i="${i}"><span><span class="nm">${esc(x.name)}</span><br><span class="sub">${esc(sub)}</span>${bad ? '<br><span class="tag warn-t">wartości się nie zgadzają</span>' : ''}${x.missing.length ? '<br><span class="tag">niepełne dane</span>' : ''}</span><span class="kcr"><b>${kc(v.kcal)}</b><br><span class="sub">kcal/100 g</span></span></button>`;
+}
+function offSheet(): string {
+  const d = store.ui.off.draftF; const chip = (a: string, id: string, name: string, on: boolean) => `<button class="chip" data-a="${a}" data-id="${id}" aria-pressed="${on}">${esc(name)}</button>`;
+  const sw = (id: 'poland' | 'full', name: string, hint: string) => `<button class="li sw" role="switch" aria-checked="${d[id]}" data-a="offToggle" data-id="${id}"><span><span class="nm">${name}</span><br><span class="sub">${hint}</span></span><span class="b">${d[id] ? 'Tak' : 'Nie'}</span></button>`;
+  return `<div class="scrim" data-a="offClose"></div><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-t">
+    <div class="row"><h2 class="b grow" id="sheet-t">Filtry</h2><button class="ib" data-a="offClose" aria-label="Zamknij filtry">${ico('x')}</button></div>
+    <div class="sheet-b">
+    <div class="cap">Kategoria</div><div class="chips">${CATEGORIES.map(c => chip('offCat', c.id, c.name, d.cats.includes(c.id))).join('')}</div>
+    <div class="cap">Z etykiety producenta</div><div class="chips">${LABELS.map(l => chip('offLabel', l.id, l.name, d.labels.includes(l.id))).join('')}</div>
+    <div class="meta">Tylko produkty z takim oznaczeniem. Brak oznaczenia nie znaczy, że produkt go nie spełnia. Przy alergii sprawdź opakowanie.</div>
+    <div class="card list">${sw('poland', 'Sprzedawane w Polsce', 'Bez tego większość wyników jest z innych krajów')}${sw('full', 'Tylko z pełnym makro', 'Białko, tłuszcze i węglowodany na 100 g')}</div>
+    <div class="cap">Sortowanie</div><div class="chips">${SORTS.map(o => chip('offSort', o.id, o.name, d.sort === o.id)).join('')}</div></div>
+    <div class="g2"><button class="btn" data-a="offClear">Wyczyść</button><button class="btn pri" data-a="offApply">Pokaż wyniki</button></div></div>`;
+}
+function pageOffs(): string {
+  const o = store.ui.off; const meal = (page() as { meal?: Meal }).meal;
+  const n = activeCount(o.f); const chips = filterChips(o.f);
+  const order = sortHits(o.hits.map((h, i) => ({ ...h, __i: i })), o.q, o.f.sort).map(h => (h as unknown as { __i: number }).__i);
+  const more = o.status === 'ok' && o.page < o.pages && o.hits.length > 0;
+  const manual = `<button class="btn block" data-a="open" data-p="form"${meal ? ` data-meal="${esc(meal)}"` : ''}>${ico('plus')}Dodaj produkt z etykiety</button>`;
+  let body = '';
+  if (o.status === 'loading' && !o.hits.length) body = `<div class="meta" role="status">Szukam „${esc(o.q)}” w Open Food Facts…</div>`;
+  else if (o.status === 'offline') body = `<div class="note warn" role="alert"><span class="b">Brak połączenia</span><span>Nie ma internetu albo Open Food Facts nie odpowiada. Twoje produkty działają bez sieci.</span><button class="btn" data-a="offGo">${ico('refresh')}Spróbuj ponownie</button></div>${manual}`;
+  else if (o.status === 'error') body = `<div class="note warn" role="alert"><span class="b">Open Food Facts zwrócił błąd</span><span>${esc(o.detail ?? '')}. Spróbuj za chwilę albo dodaj produkt z etykiety.</span><button class="btn" data-a="offGo">${ico('refresh')}Spróbuj ponownie</button></div>${manual}`;
+  else if (o.status === 'limit') body = `<div class="note warn" role="alert"><span class="b">Chwila przerwy</span><span>Open Food Facts pozwala na 10 wyszukiwań na minutę. Spróbuj za ${o.wait} s. Skanowanie kodu działa dalej.</span><button class="btn" data-a="offGo">${ico('refresh')}Szukaj ponownie</button></div>`;
+  else if (o.status === 'ok' && !o.hits.length) body = `<div class="note"><span class="b">Nic nie znaleziono</span><span>Spróbuj jednego słowa w podstawowej formie, np. „jogurt”${n > 1 ? ', albo usuń część filtrów' : ''}. Produkty bez kodu kreskowego (owoce na wagę, mięso z lady) są w Open Food Facts rzadko.</span></div>${manual}`;
+  if (o.hits.length) body += `<div class="row"><span class="cap grow" id="ocount">Wyniki · ${o.hits.length} z ${o.count}</span><span class="cap">${esc(SORTS.find(x => x.id === o.f.sort)!.name)}</span></div>
+    <div class="card list" id="olist">${order.map(offRow).join('')}</div>
+    ${more ? `<button class="btn block" data-a="offMore" ${o.status === 'loading' ? 'disabled' : ''}>${o.status === 'loading' ? 'Wczytuję…' : `Pokaż kolejne ${PAGE_N}`}</button>` : ''}`;
+  return `${backTop('Open Food Facts')}<div class="scroll pscroll"><div class="stack"><div class="pad">
+    <div class="srow"><div class="inp grow"><input id="oq" data-f="oq" type="search" inputmode="search" enterkeyhint="search" autocomplete="off" value="${esc(o.q)}" aria-label="Szukaj w Open Food Facts" placeholder="Nazwa produktu"></div><button class="btn ${o.sheet ? '' : 'pri'}" data-a="offGo">${ico('search')}Szukaj</button></div>
+    <div class="chips"><button class="chip" data-a="offSheet" aria-haspopup="dialog">${ico('settings')}Filtry${n ? ` · ${n}` : ''}</button>${chips.map(([id, name]) => `<button class="chip" data-a="offDrop" data-id="${id}" aria-pressed="true" aria-label="Usuń filtr: ${esc(name)}">${esc(name)}${ico('x')}</button>`).join('')}</div>
+    ${body}
+    <div class="meta">Dane: Open Food Facts, licencja ODbL. Do serwera trafia tylko wpisany tekst i filtry. Wartości porównaj z etykietą.</div></div></div></div>
+    ${o.sheet ? offSheet() : ''}`;
+}
+const PAGE_N = 20;
 export function pageHtml(): string {
   const p = page(); if (!p) return '';
   switch (p.t) {
     case 'add': return pageAdd(p.meal); case 'item': return pageItem(p); case 'form': return pageForm(p); case 'code': return pageCode(p.meal);
     case 'recipe': return pageRecipe(); case 'pickIng': return pagePickIng(); case 'profile': return pageProfile(!!p.first); case 'backup': return pageBackup(); case 'about': return pageAbout();
-    case 'quick': return pageQuick(p); case 'dayMeal': return pageDayMeal(); case 'meals': return pageMeals(); case 'goal': return pageGoal();
+    case 'quick': return pageQuick(p); case 'dayMeal': return pageDayMeal(); case 'meals': return pageMeals(); case 'goal': return pageGoal(); case 'offs': return pageOffs();
   }
 }
 export { mark };

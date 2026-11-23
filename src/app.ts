@@ -3,7 +3,7 @@ import type { WeightGoal } from './domain/progress';
 import type { Pending } from './storage/backup';
 import { getAll, getMeta } from './storage/db';
 import { isNative } from './platform/files';
-import { goBack, onChange, onClick, onInput, push } from './ui/actions';
+import { goBack, onChange, onClick, onInput, onKey, push } from './ui/actions';
 import { applyTheme, render } from './ui/render';
 import { initStore, store, type Settings } from './ui/state';
 
@@ -16,7 +16,7 @@ export async function startApp(root: HTMLElement, db: IDBDatabase): Promise<void
   (window as unknown as { __fuel?: unknown }).__fuel = store;   // read by the e2e tests
   applyTheme(); render(false);
   if (!profile) push({ t: 'profile', first: true });
-  root.addEventListener('click', onClick); root.addEventListener('input', onInput); root.addEventListener('change', onChange);
+  root.addEventListener('click', onClick); root.addEventListener('input', onInput); root.addEventListener('change', onChange); root.addEventListener('keydown', onKey);
   matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => { if (store.settings.theme === 'system') applyTheme(); });
   document.addEventListener('keydown', ev => { if (ev.key === 'Escape') goBack(); });
   if (isNative()) {

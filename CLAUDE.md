@@ -16,7 +16,8 @@ Capacitor 8 + TypeScript + Vite, bez frameworka UI (HTML jako tekst w `src/ui/vi
 - Pisanie w polu nie przerysowuje strony: zmieniają się tylko elementy `data-live` (`renderPage(true)`), inaczej klawiatura się zamyka.
 - Logo i ekran startowy: `scripts/brand.mjs` to jedyne źródło geometrii, `node scripts/gen-icons.mjs` pisze z niego resztę. Nie edytuj wygenerowanych plików ręcznie.
 - Skaner: `@capacitor-mlkit/barcode-scanning`, `scan()` (okno skanera Google, wymaga Usług Google Play). Bez skanera zawsze jest "Wpisz kod".
-- Open Food Facts: wysyłany jest tylko kod. `CapacitorHttp` w `capacitor.config.ts` przepuszcza fetch przez natywny HTTP, żeby User-Agent faktycznie dochodził. Dane ODbL: źródło podane w O aplikacji.
+- Wyszukiwanie po nazwie: `src/domain/search.ts` (Search-a-licious, `search.openfoodfacts.org`). Szukamy tylko po zatwierdzeniu (limit 10/min, `RateLimit`), sortowanie w telefonie. Bez filtra „bez alergenu”: brak danych w OFF wygląda jak brak alergenu.
+- Open Food Facts: przy skanie wysyłany jest tylko kod, przy wyszukiwaniu tylko tekst i filtry. `CapacitorHttp` w `capacitor.config.ts` przepuszcza fetch przez natywny HTTP, żeby User-Agent faktycznie dochodził. Dane ODbL: źródło podane w O aplikacji.
 
 ## Zasady UI (mierzone w e2e skryptem `tests/e2e/audit.js`)
 Akcent malinowy tylko na akcji, najwyżej 3 elementy i 1 główny przycisk na ekran. Cele dotyku 48 px, 8 px między małymi. Jedna rodzina (Barlow 400/700), tekst 11/13/16/23/33, odstępy co 4, promienie 8 i 24, dwa cienie. Brak poziomego przewijania przy 360 i 412 px. Etykiety nigdy ucięte. Stan słowem, nie kolorem. Usuwanie z cofnięciem.

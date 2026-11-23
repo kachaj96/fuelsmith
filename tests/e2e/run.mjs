@@ -16,6 +16,11 @@ let P = 0, F = 0; const check = (name, ok, detail = '') => { if (ok) { P++; cons
 const LAYS = { code: '5900259128546', status: 1, product: { brands: "Lay's", product_name: 'Oven Baked Chanterelles in a cream sauce flavoured', serving_size: '1 portion (30 g)', nutriments: { 'energy-kcal_100g': 441, proteins_100g: 5.7, fat_100g: 14, carbohydrates_100g: 73.8, fiber_100g: 4.8 } } };
 const PARTIAL = { code: '5000112637922', status: 1, product: { product_name: 'Cola', nutriments: { 'energy-kj_100g': 180 } } };
 
+/* Search mock: "skyr" has 25 results over 2 pages; "nicnie" has none; "siec" fails like a lost connection. */
+const N = (code, name, kcal, p, f, c, quantity) => ({ code, product_name: name, brands: ['Mleczarnia Test'], ...(quantity ? { quantity } : {}), nutriments: { 'energy-kcal_100g': kcal, proteins_100g: p, ...(f == null ? {} : { fat_100g: f }), carbohydrates_100g: c } });
+const SKYR1 = [N('5900000000015', 'Skyr naturalny', 63, 12, 0, 3.8, '150 g'), N('5900000000022', 'Skyr pitny wanilia', 64, 7.5, 0.3, 7.9), N('5900000000039', 'Serek typu skyr', 98, 76, 0, 3)];
+const SKYR2 = [N('5900000000046', 'Skyr truskawka', 82, 9, 0.2, 11), N('5900000000053', 'Skyr mango', 90, 8, null, 13)];
+
 const browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {});
 async function open(w, h, scheme) {
   const ctx = await browser.newContext({ viewport: { width: w, height: h }, locale: 'pl-PL', colorScheme: scheme, hasTouch: true });
@@ -28,10 +33,17 @@ async function open(w, h, scheme) {
     if (u.includes('/4006381333931.json')) return route.abort('internetdisconnected');
     return route.fulfill({ json: { status: 0, status_verbose: 'product not found' } });
   });
+  const searches = [];
+  await ctx.route('https://search.openfoodfacts.org/**', route => {
+    const u = new URL(route.request().url()); searches.push(u); const q = u.searchParams.get('q') ?? '';
+    if (q.startsWith('siec')) return route.abort('internetdisconnected');
+    if (q.startsWith('skyr')) return route.fulfill({ json: { count: 25, page_count: 2, page: +u.searchParams.get('page'), hits: u.searchParams.get('page') === '2' ? SKYR2 : SKYR1 } });
+    return route.fulfill({ json: { count: 0, page_count: 0, hits: [] } });
+  });
   const page = await ctx.newPage(); const errors = [];
   page.on('pageerror', e => errors.push(e.message));
   await page.goto(BASE); await page.waitForSelector('#page-title'); await page.waitForTimeout(300);
-  return { ctx, page, errors, calls };
+  return { ctx, page, errors, calls, searches };
 }
 async function audit(page, tag) {
   await page.waitForTimeout(260);
@@ -54,7 +66,7 @@ const closed = page => page.waitForFunction(() => !document.querySelector('.page
 const txt = async (page, sel) => ((await page.textContent(sel)) ?? '').replace(/\s/g, '');
 
 for (const scheme of ['light', 'dark']) for (const [w, h] of [[360, 760], [412, 915]]) {
-  const T = `[${scheme} ${w}]`; const { ctx, page, errors, calls } = await open(w, h, scheme);
+  const T = `[${scheme} ${w}]`; const { ctx, page, errors, calls, searches } = await open(w, h, scheme);
   // 1. first start: targets
   check(`${T} first start opens the targets`, (await page.textContent('#page-title')) === 'Twoje cele');
   await audit(page, `${T} targets`);
@@ -194,6 +206,44 @@ for (const scheme of ['light', 'dark']) for (const [w, h] of [[360, 760], [412, 
   check(`${T} undo removes the override`, await page.evaluate(() => window.__fuel.overrides.kcal == null));
   await page.click('[data-a=prog][data-id=water]'); await audit(page, `${T} water`);
   check(`${T} water history shows "brak" for empty days`, (await page.locator('.mac', { hasText: 'brak' }).count()) >= 1);
+  // ---- 0.5: search in Open Food Facts by name ----
+  await page.click('[data-a=tab][data-id=products]');
+  check(`${T} search: nothing is sent while typing`, await (async () => { await page.fill('#q', 'skyr'); return searches.length === 0; })());
+  check(`${T} search: the Open Food Facts button names the text`, /Szukaj „skyr” w Open Food Facts/.test((await page.textContent('[data-a=offSearch]')) ?? ''));
+  await page.press('#q', 'Enter'); await page.waitForSelector('#olist');
+  { const q = searches[0]?.searchParams.get('q'); check(`${T} search: Enter sends the text with Poland and full macros`, searches.length === 1 && q === 'skyr countries_tags:"en:poland" nutriments.proteins_100g:* nutriments.fat_100g:* nutriments.carbohydrates_100g:*', q); }
+  check(`${T} search: 3 of 25 results shown`, (await txt(page, '#ocount')) === 'Wyniki·3z25' && (await page.locator('#olist [data-a=offPick]').count()) === 3, await txt(page, '#ocount'));
+  check(`${T} search: values that do not add up are marked`, (await page.locator('#olist .warn-t').count()) === 1);
+  await audit(page, `${T} search`);
+  await page.click('[data-a=offSheet]'); await audit(page, `${T} search filters`);
+  await page.click('[data-a=offSort][data-id=protein]'); await page.click('[data-a=offCat][data-id=dairy]'); await page.click('[data-a=offApply]'); await page.waitForTimeout(250);
+  check(`${T} search: a category is a new request`, searches.length === 2 && /categories_tags:"en:dairies"/.test(searches[1].searchParams.get('q')));
+  { const names = await page.locator('#olist .nm').allTextContents(); check(`${T} search: protein per 100 kcal, the bad label last`, names.join('|') === 'Skyr naturalny|Skyr pitny wanilia|Serek typu skyr', names.join('|')); }
+  await page.click('[data-a=offSheet]'); await page.click('[data-a=offSort][data-id=kcal]'); await page.click('[data-a=offApply]'); await page.waitForTimeout(150);
+  check(`${T} search: sorting alone sends nothing`, searches.length === 2 && (await page.locator('[data-a=offSheet]').count()) === 1 && (await page.locator('.sheet').count()) === 0);
+  await page.click('[data-a=offMore]'); await page.waitForTimeout(250);
+  check(`${T} search: next page adds results`, searches.length === 3 && searches[2].searchParams.get('page') === '2' && (await page.locator('#olist [data-a=offPick]').count()) === 5);
+  check(`${T} search: incomplete data is marked`, (await page.locator('#olist .tag', { hasText: 'niepełne dane' }).count()) === 1);
+  await page.click('[data-a=offDrop][data-id="poland:"]'); await page.waitForTimeout(250);
+  check(`${T} search: removing a filter chip searches again without it`, searches.length === 4 && !/countries_tags/.test(searches[3].searchParams.get('q')));
+  const before = await page.evaluate(() => window.__fuel.products.length);
+  await page.click('#olist [data-a=offPick] >> text=Skyr naturalny'); await page.waitForSelector('#pkcal');
+  check(`${T} search: a result opens like a scan, 150 g pack`, (await page.locator('.note.warn').count()) === 1 && /5900000000015/.test((await page.textContent('.page .meta')) ?? ''));
+  await page.click('[data-a=back]'); await page.click('#olist [data-a=offPick] >> text=Skyr naturalny'); await page.waitForSelector('#pkcal');
+  check(`${T} search: the same product twice is saved once`, await page.evaluate(() => window.__fuel.products.length) === before + 1);
+  await page.click('[data-a=back]'); await page.click('[data-a=offMore]'); await page.waitForTimeout(250); await page.click('#olist [data-a=offPick] >> text=Skyr mango'); await page.waitForSelector('#kcal');
+  check(`${T} search: a result with gaps opens the form, fat left empty`, (await page.inputValue('#kcal')) === '90' && (await page.inputValue('#f')) === '');
+  await page.click('[data-a=back]');
+  await page.fill('#oq', 'nicnie'); await page.press('#oq', 'Enter'); await page.waitForTimeout(250);
+  check(`${T} search: no results says what to try`, /Nic nie znaleziono/.test((await page.textContent('.page')) ?? '') && (await page.locator('.page [data-a=open][data-p=form]').count()) === 1);
+  await page.fill('#oq', 'siec'); await page.click('[data-a=offGo]'); await page.waitForTimeout(250);
+  check(`${T} search: no connection is said plainly`, /Brak połączenia/.test((await page.textContent('.page')) ?? ''));
+  await audit(page, `${T} search offline`);
+  for (let i = 0; i < 6; i++) { await page.click('[data-a=offGo]'); await page.waitForTimeout(60); }
+  check(`${T} search: at most 10 a minute, then a wait`, searches.length === 10 && /10 wyszukiwań na minutę/.test((await page.textContent('.page')) ?? ''), String(searches.length));
+  await page.click('[data-a=back]'); await page.fill('#q', ''); await page.waitForTimeout(100);
+  check(`${T} search: recent searches on Products`, (await page.locator('[data-a=offSearch][data-q=skyr]').count()) === 1);
+  check(`${T} search: filters remembered`, await page.evaluate(() => JSON.parse(localStorage.getItem('fuelsmith.searchFilters')).cats.join() === 'dairy'));
   check(`${T} no page errors`, errors.length === 0, errors.join(' | '));
   await ctx.close();
 }

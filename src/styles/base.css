@@ -151,3 +151,20 @@ h1, h2, h3, p { margin: 0; }
 .cal { margin: 0 -12px; gap: 2px; }
 .cal button { font-size: var(--t-meta); }
 .cal .k { font-size: var(--t-meta); }
+
+/* 0.5: Open Food Facts search */
+.srow { display: flex; gap: var(--tap-gap); align-items: center; }
+.srow .btn { flex: none; }
+.chip .ico { width: 16px; height: 16px; margin-left: var(--s1); }
+.chip .ico:first-child { margin: 0 var(--s1) 0 0; }
+.kcr { text-align: right; line-height: 1.2; }
+.clip { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.scrim { position: absolute; inset: 0; z-index: 20; background: var(--scrim); }
+.sheet { position: absolute; left: 0; right: 0; bottom: 0; z-index: 21; max-height: 88%; overflow: hidden; display: flex; flex-direction: column; gap: var(--s3);
+  background: var(--surface); border-radius: var(--r-out) var(--r-out) 0 0; box-shadow: var(--sh-lg); padding: var(--s2) var(--s4) calc(var(--s4) + env(safe-area-inset-bottom, 0px)); animation: rise .2s ease-out; }
+.sheet-b { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: var(--s3); margin: 0 calc(-1 * var(--s4)); padding: 0 var(--s4) var(--s2); }
+.sheet > .g2 { flex: none; padding-top: var(--s2); border-top: 1px solid var(--line); }
+.sheet h2 { font-size: var(--t-title); line-height: 1.2; margin: 0; }
+.sheet .row .ib { margin-right: -12px; }
+.li.sw { grid-template-columns: minmax(0, 1fr) auto; }
+@media (prefers-reduced-motion: reduce) { .sheet { animation: none; } }

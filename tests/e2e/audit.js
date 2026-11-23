@@ -66,9 +66,13 @@
     const ctlSel = 'a[href],button,input:not([type=hidden]),select,textarea,summary,[role=button],[role=tab],[role=link],[role=switch],[role=checkbox],[tabindex]:not([tabindex="-1"])';
     const ctls = shown.filter(e => e.matches(ctlSel) && !e.matches('label input[type=checkbox][style*="opacity: 0"]'));
     const inline = e => e.tagName === 'A' && e.closest('p,li,td') && getComputedStyle(e).display === 'inline';
-    const rects = ctls.map(e => ({ e, r: e.getBoundingClientRect(), soft: o.softTarget && e.matches(o.softTarget) }));
+    // the part of a control that can be seen: cut by every scrolling or clipping box around it (a chip scrolled under a sheet's footer is not under it)
+    const clipped = e => { let r = e.getBoundingClientRect(); let L = r.left, T = r.top, R = r.right, B = r.bottom;
+      for (let x = e.parentElement; x && x !== document.body; x = x.parentElement) { const cs = getComputedStyle(x); if (/(auto|scroll|hidden|clip)/.test(cs.overflowX + cs.overflowY)) { const c = x.getBoundingClientRect(); L = Math.max(L, c.left); T = Math.max(T, c.top); R = Math.min(R, c.right); B = Math.min(B, c.bottom); } }
+      return { left: L, top: T, right: R, bottom: B, width: Math.max(0, R - L), height: Math.max(0, B - T) }; };
+    const rects = ctls.map(e => ({ e, r: clipped(e), full: e.getBoundingClientRect(), soft: o.softTarget && e.matches(o.softTarget) })).filter(x => x.r.width > 0 && x.r.height > 0);
     out.targets = rects.length;
-    out.smallTargets = rects.filter(x => !inline(x.e) && (x.r.width < o.tap - 0.5 || x.r.height < (x.soft ? o.tap - 8.5 : o.tap - 0.5))).map(x => `${desc(x.e)} ${Math.round(x.r.width)}x${Math.round(x.r.height)}`);
+    out.smallTargets = rects.filter(x => !inline(x.e) && (x.full.width < o.tap - 0.5 || x.full.height < (x.soft ? o.tap - 8.5 : o.tap - 0.5))).map(x => `${desc(x.e)} ${Math.round(x.full.width)}x${Math.round(x.full.height)}`);   // size of the whole control, even when partly scrolled away
     out.inlineLinks = rects.filter(x => inline(x.e)).length;
     const ov = [], close = [];
     for (let i = 0; i < rects.length; i++) for (let j = i + 1; j < rects.length; j++) {

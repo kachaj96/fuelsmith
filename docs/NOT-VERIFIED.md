@@ -12,4 +12,5 @@ Testy (vitest, Playwright Chromium 360 i 412 px, jasny i ciemny motyw) przeszły
 | Ekran | Krawędzie ekranu (wycięcie, pasek gestów), klawiatura numeryczna przy polach gramów, przycisk wstecz Androida. | 0.3 |
 | Prognoza i podpowiedzi | Zachowanie na prawdziwych, nieregularnych pomiarach przez kilka tygodni. W testach tylko dane modelowe (stałe tempo, codzienne wpisy). | 0.4 |
 | Kalendarz i posiłki | Przewijanie miesięcy i edycja nazw posiłków na telefonie z klawiaturą Androida. | 0.4 |
+| Wyszukiwarka OFF | Wywołania z telefonu (CapacitorHttp) do search.openfoodfacts.org. Sprawdzone 2026-11-23 tylko z kontenera (curl): odpowiedzi, filtry kraju, kategorii, oznaczeń i pełnego makro. Limit 10/min jest udokumentowany dla starego API wyszukiwania; dla Search-a-licious nie znalazłem liczby, aplikacja stosuje 10/min. Trafność po polsku sprawdzona na kilku słowach (jogurt, skyr, twaróg, serek wiejski), nie systematycznie. | 0.5 |
 | Ikona | Maski launcherów i ikona monochromatyczna Androida 13+. | 0.3 |
